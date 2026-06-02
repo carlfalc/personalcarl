@@ -9,22 +9,18 @@ export function TopBar() {
     return () => clearInterval(t);
   }, []);
 
-  const time12 = format(now, "hh:mm a");
   const time24 = format(now, "HH:mm");
   const day = format(now, "EEEE");
   const date = format(now, "MMMM d, yyyy");
 
   return (
     <header className="bg-header text-header-foreground">
-      <div className="flex items-center justify-between gap-6 px-10 py-5 sm:px-16 lg:px-20">
-        <div className="flex items-baseline gap-4 min-w-0">
+      <div className="flex items-center justify-between gap-6 px-6 py-5 sm:px-8">
+        <div className="flex items-baseline gap-2 min-w-0 pl-[16rem]">
           <div className="text-4xl sm:text-5xl font-bold tracking-tight tabular-nums">
-            {time12}
+            {time24}
           </div>
-          <div className="hidden sm:flex items-baseline gap-1 text-white/70">
-            <span className="text-xl font-semibold tabular-nums">{time24}</span>
-            <span className="text-[10px] uppercase tracking-wider">24H</span>
-          </div>
+          <span className="text-[10px] uppercase tracking-wider text-white/60">24H</span>
         </div>
         <div className="hidden md:flex items-center gap-3 text-2xl sm:text-3xl font-bold">
           <span>{day}</span>
