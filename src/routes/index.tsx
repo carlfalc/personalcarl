@@ -58,6 +58,7 @@ function TodayPage() {
   useRealtimeTable("entries", ["today-entries"]);
   useRealtimeTable("meetings", ["today-meetings"]);
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const cancelEvent = useServerFn(cancelCalendarEvent);
   const rescheduleEvent = useServerFn(rescheduleCalendarEvent);
 
