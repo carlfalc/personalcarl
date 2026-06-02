@@ -29,7 +29,7 @@ const GOOGLE_MAIL_API_KEY = Deno.env.get("GOOGLE_MAIL_API_KEY")!;
 const GATEWAY = "https://connector-gateway.lovable.dev";
 
 type EntryType = "task" | "idea" | "todo" | "diary";
-type MemoryCategory = "interest" | "project" | "preference";
+type MemoryCategory = "interest" | "project" | "preference" | "family" | "business" | "technology" | "travel";
 
 interface ParsedNote {
   entries: Array<{
@@ -45,7 +45,15 @@ interface ParsedNote {
     location?: string | null;
     notes?: string | null;
   }>;
-  memory: Array<{ fact: string; category: MemoryCategory; confidence?: number }>;
+  memory: Array<{
+    fact: string;
+    category: MemoryCategory;
+    confidence?: number;
+    contact_email?: string | null;
+    contact_phone?: string | null;
+    relationship?: string | null;
+    birth_date?: string | null;
+  }>;
   email_intents: Array<{ recipient_query: string }>;
 }
 
@@ -56,15 +64,21 @@ const SYSTEM_PROMPT = `You parse a personal-assistant voice note into structured
 {
   entries: [{ type: 'task'|'idea'|'todo'|'diary', content: string, tags: string[], priority: 1|2|3, due_date: string|null }],
   meetings: [{ title: string, datetime: string, location: string|null, notes: string|null }],
-  memory: [{ fact: string, category: 'interest'|'project'|'preference', confidence: number }],
+  memory: [{ fact: string, category: 'interest'|'project'|'preference'|'family'|'business'|'technology'|'travel', confidence: number, contact_email: string|null, contact_phone: string|null, relationship: string|null, birth_date: string|null }],
   email_intents: [{ recipient_query: string }]
 }
 
 Rules:
 - email_intents: include ONLY when the user clearly asks to email/send something to someone (e.g. "send email to kitchen", "email Sarah"). recipient_query is the name/word the user used to refer to the recipient. Do NOT invent a subject or body — those are gathered in a follow-up step.
-- Scheduled items → meetings. Durable facts → memory. Reflective → diary. Empty arrays if nothing fits.`;
+- Never include email_intents for tasks, todos, meetings, ideas, diary notes, family/contact updates, birthdays, or generic "stop/cancel" messages.
+- Tasks/to-dos → entries. Ideas → entries with type "idea". Scheduled calendar appointments → meetings. Durable facts → memory. Reflective notes → diary entries.
+- Family/contact commands such as "add my sister Jane" or "add family name Jane" → memory with category "family". Put the person's name in fact if that is all you know, and fill contact_email, contact_phone, relationship, and birth_date only when provided.
+- Business, technology, and travel facts/preferences → memory with their matching category when clearly requested.
+- Empty arrays if nothing fits.`;
 
 const COMPOSE_PROMPT = `You write a short professional email on behalf of the sender, based on what they just dictated. Return ONLY valid JSON: { "subject": string, "body": string }. Keep it concise, in the sender's voice, no signature block.`;
+
+const FAMILY_PROFILE_PROMPT = `Extract family contact/profile details from the user's reply. Return ONLY valid JSON: { "contact_email": string|null, "contact_phone": string|null, "relationship": string|null, "birth_date": string|null, "has_no_more_details": boolean }. Use YYYY-MM-DD for birth_date when possible. If they say they don't have the details, set has_no_more_details true.`;
 
 // ---------- Telegram helpers ----------
 async function sendTelegram(chatId: number, text: string): Promise<void> {
@@ -152,6 +166,28 @@ async function composeEmail(description: string): Promise<{ subject: string; bod
     };
   } catch {
     return { subject: "(no subject)", body: description };
+  }
+}
+
+async function extractFamilyProfileDetails(text: string): Promise<{
+  contact_email: string | null;
+  contact_phone: string | null;
+  relationship: string | null;
+  birth_date: string | null;
+  has_no_more_details: boolean;
+}> {
+  try {
+    const parsed = JSON.parse(stripCodeFences(await callClaude(FAMILY_PROFILE_PROMPT, text)));
+    return {
+      contact_email: parsed.contact_email ?? null,
+      contact_phone: parsed.contact_phone ?? null,
+      relationship: parsed.relationship ?? null,
+      birth_date: parsed.birth_date ?? null,
+      has_no_more_details: Boolean(parsed.has_no_more_details),
+    };
+  } catch (e) {
+    console.error("extractFamilyProfileDetails parse error", e);
+    return { contact_email: null, contact_phone: null, relationship: null, birth_date: null, has_no_more_details: /don'?t have|no details|not sure/i.test(text) };
   }
 }
 
@@ -297,6 +333,7 @@ async function startRecipientFlow(
 const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 const YES_WORDS = ["yes", "y", "ok", "yep", "yeah", "correct", "confirm", "send", "go"];
 const CANCEL_WORDS = ["cancel", "no", "stop", "abort", "nope"];
+const EMAIL_FLOW_TIMEOUT_MS = 30 * 60 * 1000;
 
 interface Pending {
   id: string;
@@ -306,6 +343,70 @@ interface Pending {
   candidates: Array<{ name: string; email: string }>;
   subject: string;
   body: string;
+  updated_at?: string;
+}
+
+interface PendingFamilyProfile {
+  id: string;
+  memory_id: string;
+  status: string;
+  updated_at?: string;
+  memory_name?: string | null;
+}
+
+function isCancelCommand(text: string): boolean {
+  const lower = text.trim().toLowerCase();
+  return CANCEL_WORDS.includes(lower) || /\b(cancel|stop|abort|forget it|never mind|nevermind)\b/i.test(lower);
+}
+
+function looksLikeNewAssistantCommand(text: string): boolean {
+  return /\b(add|create|organise|organize|schedule|book|make|save|remember|note|record)\b/i.test(text)
+    || /\b(task|todo|to-do|meeting|appointment|idea|diary|family|birthday|business|technology|travel)\b/i.test(text);
+}
+
+function isFreshPending(pending: Pending): boolean {
+  if (!pending.updated_at) return true;
+  return Date.now() - new Date(pending.updated_at).getTime() <= EMAIL_FLOW_TIMEOUT_MS;
+}
+
+function isRecipientFlowReply(text: string, pending: Pending): boolean {
+  const trimmed = text.trim().toLowerCase();
+  const num = parseInt(trimmed, 10);
+  return isCancelCommand(text)
+    || EMAIL_RE.test(text)
+    || YES_WORDS.includes(trimmed)
+    || (!isNaN(num) && num >= 1 && num <= pending.candidates.length);
+}
+
+async function handlePendingFamilyProfile(
+  supabase: ReturnType<typeof createClient>,
+  chatId: number,
+  text: string,
+  pending: PendingFamilyProfile,
+): Promise<boolean> {
+  if (!isFreshPending(pending as Pending) || looksLikeNewAssistantCommand(text)) {
+    await supabase.from("pending_family_profiles").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("id", pending.id);
+    return false;
+  }
+
+  const details = await extractFamilyProfileDetails(text);
+  if (details.has_no_more_details) {
+    await supabase.from("pending_family_profiles").update({ status: "completed", updated_at: new Date().toISOString() }).eq("id", pending.id);
+    await sendTelegram(chatId, `✅ No problem — ${pending.memory_name ?? "that family member"} is saved.`);
+    return true;
+  }
+
+  const updates = {
+    contact_email: details.contact_email,
+    contact_phone: details.contact_phone,
+    relationship: details.relationship,
+    birth_date: details.birth_date,
+    updated_at: new Date().toISOString(),
+  };
+  await supabase.from("memory").update(updates).eq("id", pending.memory_id);
+  await supabase.from("pending_family_profiles").update({ status: "completed", updated_at: new Date().toISOString() }).eq("id", pending.id);
+  await sendTelegram(chatId, `✅ Updated ${pending.memory_name ?? "the family profile"}.`);
+  return true;
 }
 
 async function handleAwaitingRecipient(
@@ -316,7 +417,7 @@ async function handleAwaitingRecipient(
 ): Promise<void> {
   const trimmed = text.trim().toLowerCase();
 
-  if (CANCEL_WORDS.includes(trimmed)) {
+  if (isCancelCommand(text)) {
     await supabase.from("pending_email_intents").update({ status: "cancelled" }).eq("id", pending.id);
     await sendTelegram(chatId, "❌ Cancelled.");
     return;
@@ -373,7 +474,7 @@ async function handleAwaitingContent(
   pending: Pending,
 ): Promise<void> {
   const trimmed = text.trim().toLowerCase();
-  if (CANCEL_WORDS.includes(trimmed)) {
+  if (isCancelCommand(text)) {
     await supabase.from("pending_email_intents").update({ status: "cancelled" }).eq("id", pending.id);
     await sendTelegram(chatId, "❌ Cancelled.");
     return;
@@ -471,10 +572,33 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // Active family profile follow-up, unless this is clearly a new command
+    const { data: familyPendingRows } = await supabase
+      .from("pending_family_profiles")
+      .select("id, memory_id, status, updated_at")
+      .eq("chat_id", chatId)
+      .eq("status", "awaiting_details")
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    const familyPending = familyPendingRows?.[0] as PendingFamilyProfile | undefined;
+    if (familyPending) {
+      const { data: familyMemory } = await supabase.from("memory").select("fact").eq("id", familyPending.memory_id).maybeSingle();
+      const handledFamily = await handlePendingFamilyProfile(supabase, chatId, transcript, {
+        ...familyPending,
+        memory_name: familyMemory?.fact ?? null,
+      });
+      if (handledFamily) {
+        return new Response(JSON.stringify({ ok: true, handled: "family_profile" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     // Active email flow takes priority
     const { data: pendingRows } = await supabase
       .from("pending_email_intents")
-      .select("id, status, recipient_email, recipient_name, candidates, subject, body")
+      .select("id, status, recipient_email, recipient_name, candidates, subject, body, updated_at")
       .eq("chat_id", chatId)
       .in("status", ["awaiting_recipient", "awaiting_content"])
       .order("created_at", { ascending: false })
@@ -482,6 +606,13 @@ Deno.serve(async (req) => {
 
     const pending = pendingRows?.[0] as Pending | undefined;
     if (pending) {
+      const shouldContinueEmailFlow = pending.status === "awaiting_content"
+        ? isFreshPending(pending) && !looksLikeNewAssistantCommand(transcript)
+        : isFreshPending(pending) && isRecipientFlowReply(transcript, pending);
+
+      if (!shouldContinueEmailFlow) {
+        await supabase.from("pending_email_intents").update({ status: "cancelled" }).eq("id", pending.id);
+      } else {
       if (pending.status === "awaiting_recipient") {
         await handleAwaitingRecipient(supabase, chatId, transcript, pending);
       } else {
@@ -490,6 +621,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: true, handled: pending.status }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+      }
     }
 
     // Otherwise classify as note
@@ -511,6 +643,7 @@ Deno.serve(async (req) => {
       const { error } = await supabase.from("meetings").insert(rows);
       if (error) console.error("meetings insert error", error);
     }
+    let familyFollowUp: { memory_id: string; name: string } | null = null;
     for (const m of parsed.memory) {
       const { data: existing } = await supabase
         .from("memory").select("id").eq("fact", m.fact).maybeSingle();
@@ -518,13 +651,35 @@ Deno.serve(async (req) => {
         await supabase.from("memory").update({
           category: m.category, confidence: m.confidence ?? 0.8,
           source: "telegram", updated_at: new Date().toISOString(),
+          contact_email: m.contact_email ?? null,
+          contact_phone: m.contact_phone ?? null,
+          relationship: m.relationship ?? null,
+          birth_date: m.birth_date ?? null,
         }).eq("id", existing.id);
+        if (m.category === "family" && (!m.contact_email || !m.contact_phone || !m.relationship || !m.birth_date)) {
+          familyFollowUp = { memory_id: existing.id, name: m.fact };
+        }
       } else {
-        await supabase.from("memory").insert({
+        const { data: inserted } = await supabase.from("memory").insert({
           fact: m.fact, category: m.category,
           confidence: m.confidence ?? 0.8, source: "telegram",
-        });
+          contact_email: m.contact_email ?? null,
+          contact_phone: m.contact_phone ?? null,
+          relationship: m.relationship ?? null,
+          birth_date: m.birth_date ?? null,
+        }).select("id").maybeSingle();
+        if (m.category === "family" && inserted?.id && (!m.contact_email || !m.contact_phone || !m.relationship || !m.birth_date)) {
+          familyFollowUp = { memory_id: inserted.id, name: m.fact };
+        }
       }
+    }
+
+    if (familyFollowUp) {
+      await supabase.from("pending_family_profiles").insert({
+        chat_id: chatId,
+        memory_id: familyFollowUp.memory_id,
+        status: "awaiting_details",
+      });
     }
 
     // Start at most one email flow per message (simplest UX)
@@ -535,6 +690,9 @@ Deno.serve(async (req) => {
 
     const summary = summarise(parsed, firstIntent ? 1 : 0);
     if (summary) await sendTelegram(chatId, summary);
+    if (familyFollowUp) {
+      await sendTelegram(chatId, `👤 I added ${familyFollowUp.name} as family. Send any profile details you have — relationship, phone, email, address or birthday. If you don't have them, just say "I don't have it".`);
+    }
 
     return new Response(JSON.stringify({ ok: true, parsed }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

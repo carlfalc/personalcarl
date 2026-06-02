@@ -256,6 +256,33 @@ export type Database = {
         }
         Relationships: []
       }
+      pending_family_profiles: {
+        Row: {
+          chat_id: number
+          created_at: string
+          id: string
+          memory_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          chat_id: number
+          created_at?: string
+          id?: string
+          memory_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          chat_id?: number
+          created_at?: string
+          id?: string
+          memory_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
