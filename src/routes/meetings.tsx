@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeTable } from "@/hooks/useRealtimeTable";
 import { PageHeader } from "@/components/PageHeader";
@@ -9,9 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Trash2, Plus, MapPin, Clock, Paperclip, Upload, FileIcon, X } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Trash2, Plus, MapPin, Clock, Paperclip, Upload, FileIcon, X, Mail } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { createCalendarEvent } from "@/lib/meetings.functions";
 
 export const Route = createFileRoute("/meetings")({
   head: () => ({ meta: [{ title: "Meetings — Personal OS" }] }),
@@ -35,11 +38,24 @@ type MeetingDoc = {
   mime_type: string | null;
 };
 
+type Participant = { email: string; sendInvite: boolean };
+
+const isGmail = (email: string) =>
+  /@(gmail\.com|googlemail\.com)$/i.test(email.trim());
+
+const isValidEmail = (email: string) =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+
 function MeetingsPage() {
   useRealtimeTable("meetings", ["meetings"]);
   useRealtimeTable("meeting_documents", ["meeting-documents"]);
   const qc = useQueryClient();
+  const createEvent = useServerFn(createCalendarEvent);
   const [form, setForm] = useState({ title: "", datetime: "", location: "", notes: "" });
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [emailDraft, setEmailDraft] = useState("");
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const newFileRef = useRef<HTMLInputElement>(null);
 
   const { data: meetings = [] } = useQuery({
     queryKey: ["meetings"],
@@ -61,18 +77,91 @@ function MeetingsPage() {
     },
   });
 
+  const addParticipant = () => {
+    const e = emailDraft.trim();
+    if (!isValidEmail(e)) { toast.error("Enter a valid email"); return; }
+    if (participants.some((p) => p.email.toLowerCase() === e.toLowerCase())) {
+      setEmailDraft(""); return;
+    }
+    setParticipants([...participants, { email: e, sendInvite: isGmail(e) }]);
+    setEmailDraft("");
+  };
+
   const create = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("meetings").insert({
-        title: form.title.trim(),
-        datetime: new Date(form.datetime).toISOString(),
-        location: form.location || null,
-        notes: form.notes || null,
-      });
+      const startIso = new Date(form.datetime).toISOString();
+      const endIso = new Date(new Date(form.datetime).getTime() + 60 * 60 * 1000).toISOString();
+      const inviteEmails = participants.filter((p) => p.sendInvite).map((p) => p.email);
+
+      // 1. Create Google Calendar event first (if invites requested) so we can store event id.
+      let googleEventId: string | null = null;
+      if (inviteEmails.length > 0) {
+        try {
+          const res = await createEvent({
+            data: {
+              title: form.title.trim(),
+              startIso,
+              endIso,
+              location: form.location || null,
+              description: [
+                form.notes || "",
+                participants.length ? `Participants: ${participants.map((p) => p.email).join(", ")}` : "",
+              ].filter(Boolean).join("\n\n"),
+              attendees: inviteEmails,
+            },
+          });
+          googleEventId = res.eventId ?? null;
+          toast.success(`Calendar invite sent to ${inviteEmails.length} attendee(s)`);
+        } catch (e) {
+          toast.error(`Calendar invite failed: ${e instanceof Error ? e.message : "unknown"}`);
+        }
+      }
+
+      // 2. Build notes including participants list.
+      const participantsLine = participants.length
+        ? `Participants: ${participants.map((p) => p.email).join(", ")}`
+        : "";
+      const finalNotes = [form.notes, participantsLine].filter(Boolean).join("\n\n") || null;
+
+      // 3. Insert meeting.
+      const { data: inserted, error } = await supabase
+        .from("meetings")
+        .insert({
+          title: form.title.trim(),
+          datetime: startIso,
+          location: form.location || null,
+          notes: finalNotes,
+          google_event_id: googleEventId,
+        })
+        .select("id")
+        .single();
       if (error) throw error;
+
+      // 4. Upload any pending attachments.
+      if (pendingFiles.length > 0 && inserted?.id) {
+        for (const file of pendingFiles) {
+          const safeName = file.name.replace(/[^\w.\-]+/g, "_");
+          const path = `${inserted.id}/${Date.now()}-${safeName}`;
+          const { error: upErr } = await supabase.storage
+            .from("meeting-documents")
+            .upload(path, file, { contentType: file.type || undefined });
+          if (upErr) { toast.error(`Upload failed: ${upErr.message}`); continue; }
+          await supabase.from("meeting_documents").insert({
+            meeting_id: inserted.id,
+            file_path: path,
+            filename: file.name,
+            size_bytes: file.size,
+            mime_type: file.type || null,
+          });
+        }
+        qc.invalidateQueries({ queryKey: ["meeting-documents"] });
+      }
     },
     onSuccess: () => {
       setForm({ title: "", datetime: "", location: "", notes: "" });
+      setParticipants([]);
+      setPendingFiles([]);
+      setEmailDraft("");
       qc.invalidateQueries({ queryKey: ["meetings"] });
       toast.success("Meeting added");
     },
@@ -119,21 +208,107 @@ function MeetingsPage() {
               placeholder="Zoom, office…"
             />
           </Field>
-          <Field label="Notes (include emails / phones to use them later)" className="sm:col-span-2">
+          <Field label="Notes" className="sm:col-span-2">
             <Textarea
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
               rows={2}
-              placeholder="With: Jane (jane@acme.com, +64 21 123 4567)…"
+              placeholder="Agenda, context…"
             />
+          </Field>
+
+          <Field label="Participants (emails)" className="sm:col-span-2">
+            <div className="flex gap-2">
+              <Input
+                type="email"
+                value={emailDraft}
+                onChange={(e) => setEmailDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addParticipant(); } }}
+                placeholder="jane@gmail.com"
+              />
+              <Button type="button" variant="secondary" onClick={addParticipant}>
+                <Plus className="mr-1 h-4 w-4" /> Add
+              </Button>
+            </div>
+            {participants.length > 0 && (
+              <ul className="mt-2 space-y-1.5">
+                {participants.map((p, i) => (
+                  <li key={p.email} className="flex items-center gap-2 rounded-md bg-muted/40 px-2 py-1.5 text-sm">
+                    <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="flex-1 truncate">{p.email}</span>
+                    {isGmail(p.email) && (
+                      <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Checkbox
+                          checked={p.sendInvite}
+                          onCheckedChange={(v) => {
+                            const next = [...participants];
+                            next[i] = { ...next[i], sendInvite: v === true };
+                            setParticipants(next);
+                          }}
+                        />
+                        Send calendar invite
+                      </label>
+                    )}
+                    <Button
+                      type="button" variant="ghost" size="icon" className="h-6 w-6"
+                      onClick={() => setParticipants(participants.filter((_, j) => j !== i))}
+                    >
+                      <X className="h-3.5 w-3.5 text-muted-foreground" />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Field>
+
+          <Field label="Attachments" className="sm:col-span-2">
+            <div className="flex items-center gap-2">
+              <Button
+                type="button" variant="secondary" size="sm"
+                onClick={() => newFileRef.current?.click()}
+              >
+                <Upload className="mr-1 h-4 w-4" /> Add files
+              </Button>
+              <input
+                ref={newFileRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  const files = e.target.files;
+                  if (!files) return;
+                  setPendingFiles([...pendingFiles, ...Array.from(files)]);
+                  if (newFileRef.current) newFileRef.current.value = "";
+                }}
+              />
+              <span className="text-xs text-muted-foreground">
+                {pendingFiles.length === 0 ? "No files queued" : `${pendingFiles.length} file(s) queued`}
+              </span>
+            </div>
+            {pendingFiles.length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {pendingFiles.map((f, i) => (
+                  <li key={`${f.name}-${i}`} className="flex items-center gap-2 rounded-md bg-muted/40 px-2 py-1 text-xs">
+                    <FileIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="flex-1 truncate">{f.name}</span>
+                    <Button
+                      type="button" variant="ghost" size="icon" className="h-6 w-6"
+                      onClick={() => setPendingFiles(pendingFiles.filter((_, j) => j !== i))}
+                    >
+                      <X className="h-3.5 w-3.5 text-muted-foreground" />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Field>
         </div>
         <div className="flex justify-end">
           <Button
-            disabled={!form.title.trim() || !form.datetime}
+            disabled={!form.title.trim() || !form.datetime || create.isPending}
             onClick={() => create.mutate()}
           >
-            <Plus className="mr-1 h-4 w-4" /> Add meeting
+            <Plus className="mr-1 h-4 w-4" /> {create.isPending ? "Saving…" : "Add meeting"}
           </Button>
         </div>
       </Card>
@@ -158,6 +333,7 @@ function MeetingsPage() {
     </div>
   );
 }
+
 
 function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
   return (
