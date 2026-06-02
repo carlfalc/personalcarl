@@ -1,9 +1,10 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import {
   Outlet,
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -15,6 +16,8 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { TopBar } from "@/components/TopBar";
 import { Toaster } from "@/components/ui/sonner";
+import { useAuthSession } from "@/hooks/useAuthSession";
+import { supabase } from "@/integrations/supabase/client";
 
 function NotFoundComponent() {
   return (
@@ -121,29 +124,66 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+const PUBLIC_PATHS = ["/login", "/signup"];
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const router = useRouter();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const { session, loading } = useAuthSession();
+
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange(() => {
+      router.invalidate();
+      queryClient.invalidateQueries();
+    });
+    return () => sub.subscription.unsubscribe();
+  }, [router, queryClient]);
+
+  const isPublic = PUBLIC_PATHS.includes(pathname);
 
   return (
     <QueryClientProvider client={queryClient}>
-      <SidebarProvider>
-        <div className="flex min-h-screen w-full flex-col bg-background">
-          <TopBar />
-          <div className="flex flex-1 w-full">
-            <AppSidebar />
-            <div className="flex flex-1 flex-col min-w-0">
-              <div className="flex items-center gap-2 px-3 py-2 md:hidden">
-                <SidebarTrigger />
-                <span className="text-sm font-medium text-muted-foreground">Personal OS</span>
+      {isPublic ? (
+        <Outlet />
+      ) : loading ? (
+        <div className="flex min-h-screen items-center justify-center bg-background">
+          <div className="text-sm text-muted-foreground">Loading…</div>
+        </div>
+      ) : !session ? (
+        <UnauthedRedirect />
+      ) : (
+        <SidebarProvider>
+          <div className="flex min-h-screen w-full flex-col bg-background">
+            <TopBar />
+            <div className="flex flex-1 w-full">
+              <AppSidebar />
+              <div className="flex flex-1 flex-col min-w-0">
+                <div className="flex items-center gap-2 px-3 py-2 md:hidden">
+                  <SidebarTrigger />
+                  <span className="text-sm font-medium text-muted-foreground">Personal OS</span>
+                </div>
+                <main className="flex-1">
+                  <Outlet />
+                </main>
               </div>
-              <main className="flex-1">
-                <Outlet />
-              </main>
             </div>
           </div>
-        </div>
-        <Toaster />
-      </SidebarProvider>
+        </SidebarProvider>
+      )}
+      <Toaster />
     </QueryClientProvider>
+  );
+}
+
+function UnauthedRedirect() {
+  const router = useRouter();
+  useEffect(() => {
+    router.navigate({ to: "/login" });
+  }, [router]);
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="text-sm text-muted-foreground">Redirecting…</div>
+    </div>
   );
 }
