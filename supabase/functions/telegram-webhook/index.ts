@@ -354,7 +354,7 @@ async function handleAwaitingRecipient(
 ): Promise<void> {
   const trimmed = text.trim().toLowerCase();
 
-  if (CANCEL_WORDS.includes(trimmed)) {
+  if (isCancelCommand(text)) {
     await supabase.from("pending_email_intents").update({ status: "cancelled" }).eq("id", pending.id);
     await sendTelegram(chatId, "❌ Cancelled.");
     return;
@@ -411,7 +411,7 @@ async function handleAwaitingContent(
   pending: Pending,
 ): Promise<void> {
   const trimmed = text.trim().toLowerCase();
-  if (CANCEL_WORDS.includes(trimmed)) {
+  if (isCancelCommand(text)) {
     await supabase.from("pending_email_intents").update({ status: "cancelled" }).eq("id", pending.id);
     await sendTelegram(chatId, "❌ Cancelled.");
     return;
