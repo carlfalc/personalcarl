@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
@@ -13,6 +13,7 @@ import { cancelCalendarEvent, rescheduleCalendarEvent } from "@/lib/meetings.fun
 import { BirthdayBanner } from "@/components/BirthdayBanner";
 import {
   GripVertical, Cloud, CloudRain, Sun, Check, X, CalendarClock, Lightbulb,
+  Plus, MessageSquarePlus, Mail,
 } from "lucide-react";
 import { addDays, format } from "date-fns";
 import {
