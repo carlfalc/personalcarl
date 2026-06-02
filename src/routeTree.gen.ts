@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as TodosRouteImport } from './routes/todos'
 import { Route as TasksRouteImport } from './routes/tasks'
 import { Route as SignupRouteImport } from './routes/signup'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as MeetingsRouteImport } from './routes/meetings'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IdeasRouteImport } from './routes/ideas'
@@ -33,6 +34,11 @@ const TasksRoute = TasksRouteImport.update({
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
   path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MeetingsRoute = MeetingsRouteImport.update({
@@ -79,6 +85,7 @@ export interface FileRoutesByFullPath {
   '/ideas': typeof IdeasRoute
   '/login': typeof LoginRoute
   '/meetings': typeof MeetingsRoute
+  '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
   '/tasks': typeof TasksRoute
   '/todos': typeof TodosRoute
@@ -91,6 +98,7 @@ export interface FileRoutesByTo {
   '/ideas': typeof IdeasRoute
   '/login': typeof LoginRoute
   '/meetings': typeof MeetingsRoute
+  '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
   '/tasks': typeof TasksRoute
   '/todos': typeof TodosRoute
@@ -104,6 +112,7 @@ export interface FileRoutesById {
   '/ideas': typeof IdeasRoute
   '/login': typeof LoginRoute
   '/meetings': typeof MeetingsRoute
+  '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
   '/tasks': typeof TasksRoute
   '/todos': typeof TodosRoute
@@ -118,6 +127,7 @@ export interface FileRouteTypes {
     | '/ideas'
     | '/login'
     | '/meetings'
+    | '/settings'
     | '/signup'
     | '/tasks'
     | '/todos'
@@ -130,6 +140,7 @@ export interface FileRouteTypes {
     | '/ideas'
     | '/login'
     | '/meetings'
+    | '/settings'
     | '/signup'
     | '/tasks'
     | '/todos'
@@ -142,6 +153,7 @@ export interface FileRouteTypes {
     | '/ideas'
     | '/login'
     | '/meetings'
+    | '/settings'
     | '/signup'
     | '/tasks'
     | '/todos'
@@ -155,6 +167,7 @@ export interface RootRouteChildren {
   IdeasRoute: typeof IdeasRoute
   LoginRoute: typeof LoginRoute
   MeetingsRoute: typeof MeetingsRoute
+  SettingsRoute: typeof SettingsRoute
   SignupRoute: typeof SignupRoute
   TasksRoute: typeof TasksRoute
   TodosRoute: typeof TodosRoute
@@ -181,6 +194,13 @@ declare module '@tanstack/react-router' {
       path: '/signup'
       fullPath: '/signup'
       preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/meetings': {
@@ -243,6 +263,7 @@ const rootRouteChildren: RootRouteChildren = {
   IdeasRoute: IdeasRoute,
   LoginRoute: LoginRoute,
   MeetingsRoute: MeetingsRoute,
+  SettingsRoute: SettingsRoute,
   SignupRoute: SignupRoute,
   TasksRoute: TasksRoute,
   TodosRoute: TodosRoute,
