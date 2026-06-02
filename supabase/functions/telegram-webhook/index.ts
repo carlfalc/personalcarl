@@ -512,7 +512,7 @@ Deno.serve(async (req) => {
     // Active email flow takes priority
     const { data: pendingRows } = await supabase
       .from("pending_email_intents")
-      .select("id, status, recipient_email, recipient_name, candidates, subject, body")
+      .select("id, status, recipient_email, recipient_name, candidates, subject, body, updated_at")
       .eq("chat_id", chatId)
       .in("status", ["awaiting_recipient", "awaiting_content"])
       .order("created_at", { ascending: false })
@@ -520,6 +520,13 @@ Deno.serve(async (req) => {
 
     const pending = pendingRows?.[0] as Pending | undefined;
     if (pending) {
+      const shouldContinueEmailFlow = pending.status === "awaiting_content"
+        ? isFreshPending(pending) && !looksLikeNewAssistantCommand(transcript)
+        : isFreshPending(pending) && isRecipientFlowReply(transcript, pending);
+
+      if (!shouldContinueEmailFlow) {
+        await supabase.from("pending_email_intents").update({ status: "cancelled" }).eq("id", pending.id);
+      } else {
       if (pending.status === "awaiting_recipient") {
         await handleAwaitingRecipient(supabase, chatId, transcript, pending);
       } else {
@@ -528,6 +535,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: true, handled: pending.status }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+      }
     }
 
     // Otherwise classify as note
