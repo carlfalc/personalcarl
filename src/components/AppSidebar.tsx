@@ -32,7 +32,7 @@ export function AppSidebar() {
             🧑‍🍳
           </div>
           <div className="flex flex-col group-data-[collapsible=icon]:hidden">
-            <span className="text-base font-bold leading-tight">Personal OS</span>
+            <span className="text-base font-bold leading-tight">{userName}'s</span>
             <span className="text-[11px] font-semibold uppercase tracking-wide text-orange-accent">
               Command Centre
             </span>
