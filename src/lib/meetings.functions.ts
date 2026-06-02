@@ -55,3 +55,38 @@ export const rescheduleCalendarEvent = createServerFn({ method: "POST" })
     }
     return { ok: true };
   });
+
+export const createCalendarEvent = createServerFn({ method: "POST" })
+  .inputValidator((input) =>
+    z.object({
+      title: z.string().min(1).max(300),
+      startIso: z.string().min(10).max(40),
+      endIso: z.string().min(10).max(40),
+      location: z.string().max(300).optional().nullable(),
+      description: z.string().max(5000).optional().nullable(),
+      attendees: z.array(z.string().email()).max(50).default([]),
+    }).parse(input),
+  )
+  .handler(async ({ data }) => {
+    const body: Record<string, unknown> = {
+      summary: data.title,
+      start: { dateTime: data.startIso, timeZone: "UTC" },
+      end: { dateTime: data.endIso, timeZone: "UTC" },
+    };
+    if (data.location) body.location = data.location;
+    if (data.description) body.description = data.description;
+    if (data.attendees.length > 0) {
+      body.attendees = data.attendees.map((email) => ({ email }));
+    }
+    const url = `${GATEWAY}/calendars/primary/events?sendUpdates=all`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: gcalHeaders(),
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      throw new Error(`Google Calendar create failed (${res.status}): ${(await res.text()).slice(0, 200)}`);
+    }
+    const json = await res.json() as { id?: string };
+    return { ok: true, eventId: json.id ?? null };
+  });
