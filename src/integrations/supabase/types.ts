@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      drafts_log: {
+        Row: {
+          body_preview: string | null
+          created_at: string
+          gmail_draft_id: string
+          id: string
+          recipient: string | null
+          subject: string | null
+          user_id: string
+        }
+        Insert: {
+          body_preview?: string | null
+          created_at?: string
+          gmail_draft_id: string
+          id?: string
+          recipient?: string | null
+          subject?: string | null
+          user_id: string
+        }
+        Update: {
+          body_preview?: string | null
+          created_at?: string
+          gmail_draft_id?: string
+          id?: string
+          recipient?: string | null
+          subject?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       entries: {
         Row: {
           content: string
@@ -97,6 +127,33 @@ export type Database = {
           fact?: string
           id?: string
           source?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string
+          gmail_connection_id: string | null
+          gmail_email: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string
+          gmail_connection_id?: string | null
+          gmail_email?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string
+          gmail_connection_id?: string | null
+          gmail_email?: string | null
+          id?: string
           updated_at?: string
         }
         Relationships: []

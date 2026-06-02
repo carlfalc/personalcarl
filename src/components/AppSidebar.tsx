@@ -19,6 +19,7 @@ const items = [
   { title: "To-Dos",    subtitle: "Quick lists",                url: "/todos",    emoji: "📋", tint: "from-sky-200 to-sky-300" },
   { title: "Diary",     subtitle: "Notes & reflections",        url: "/diary",    emoji: "📓", tint: "from-rose-200 to-rose-300" },
   { title: "Meetings",  subtitle: "Calendar & agenda",          url: "/meetings", emoji: "📅", tint: "from-violet-200 to-violet-300" },
+  { title: "Email",     subtitle: "Voice → Gmail drafts",       url: "/email",    emoji: "✉️", tint: "from-pink-200 to-rose-300" },
   { title: "About Me",  subtitle: "Profile & memory",           url: "/about",    emoji: "🧠", tint: "from-fuchsia-200 to-pink-300" },
 ];
 
@@ -82,6 +83,19 @@ export function AppSidebar() {
                 );
               })}
             </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <button
+              onClick={async () => {
+                const { supabase } = await import("@/integrations/supabase/client");
+                await supabase.auth.signOut();
+              }}
+              className="w-full text-left px-3 py-2 text-xs text-muted-foreground hover:text-foreground group-data-[collapsible=icon]:hidden"
+            >
+              Sign out
+            </button>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
