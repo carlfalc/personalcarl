@@ -357,6 +357,25 @@ async function handleAwaitingContent(
       gmail_draft_id: draftId,
     }).eq("id", pending.id);
 
+    // Log to drafts_log so it shows up on the email page.
+    // Single-user app: pick the first profile (owner).
+    const { data: owner } = await supabase
+      .from("profiles")
+      .select("id")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (owner?.id) {
+      await supabase.from("drafts_log").insert({
+        user_id: owner.id,
+        gmail_draft_id: draftId,
+        recipient: pending.recipient_email,
+        subject,
+        body_preview: body.slice(0, 200),
+      });
+    }
+
+
     await sendTelegram(
       chatId,
       `✅ Draft saved to Gmail.\nTo: ${pending.recipient_email}\nSubject: ${subject}\n\nOpen: https://mail.google.com/mail/u/0/#drafts`,
