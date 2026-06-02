@@ -1,0 +1,1 @@
+DROP POLICY IF EXISTS "service role full access" ON public.pending_email_intents;
