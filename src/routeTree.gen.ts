@@ -11,7 +11,9 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TodosRouteImport } from './routes/todos'
 import { Route as TasksRouteImport } from './routes/tasks'
+import { Route as SignupRouteImport } from './routes/signup'
 import { Route as MeetingsRouteImport } from './routes/meetings'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as IdeasRouteImport } from './routes/ideas'
 import { Route as DiaryRouteImport } from './routes/diary'
 import { Route as AboutRouteImport } from './routes/about'
@@ -27,9 +29,19 @@ const TasksRoute = TasksRouteImport.update({
   path: '/tasks',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MeetingsRoute = MeetingsRouteImport.update({
   id: '/meetings',
   path: '/meetings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IdeasRoute = IdeasRouteImport.update({
@@ -58,7 +70,9 @@ export interface FileRoutesByFullPath {
   '/about': typeof AboutRoute
   '/diary': typeof DiaryRoute
   '/ideas': typeof IdeasRoute
+  '/login': typeof LoginRoute
   '/meetings': typeof MeetingsRoute
+  '/signup': typeof SignupRoute
   '/tasks': typeof TasksRoute
   '/todos': typeof TodosRoute
 }
@@ -67,7 +81,9 @@ export interface FileRoutesByTo {
   '/about': typeof AboutRoute
   '/diary': typeof DiaryRoute
   '/ideas': typeof IdeasRoute
+  '/login': typeof LoginRoute
   '/meetings': typeof MeetingsRoute
+  '/signup': typeof SignupRoute
   '/tasks': typeof TasksRoute
   '/todos': typeof TodosRoute
 }
@@ -77,7 +93,9 @@ export interface FileRoutesById {
   '/about': typeof AboutRoute
   '/diary': typeof DiaryRoute
   '/ideas': typeof IdeasRoute
+  '/login': typeof LoginRoute
   '/meetings': typeof MeetingsRoute
+  '/signup': typeof SignupRoute
   '/tasks': typeof TasksRoute
   '/todos': typeof TodosRoute
 }
@@ -88,18 +106,31 @@ export interface FileRouteTypes {
     | '/about'
     | '/diary'
     | '/ideas'
+    | '/login'
     | '/meetings'
+    | '/signup'
     | '/tasks'
     | '/todos'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/about' | '/diary' | '/ideas' | '/meetings' | '/tasks' | '/todos'
+  to:
+    | '/'
+    | '/about'
+    | '/diary'
+    | '/ideas'
+    | '/login'
+    | '/meetings'
+    | '/signup'
+    | '/tasks'
+    | '/todos'
   id:
     | '__root__'
     | '/'
     | '/about'
     | '/diary'
     | '/ideas'
+    | '/login'
     | '/meetings'
+    | '/signup'
     | '/tasks'
     | '/todos'
   fileRoutesById: FileRoutesById
@@ -109,7 +140,9 @@ export interface RootRouteChildren {
   AboutRoute: typeof AboutRoute
   DiaryRoute: typeof DiaryRoute
   IdeasRoute: typeof IdeasRoute
+  LoginRoute: typeof LoginRoute
   MeetingsRoute: typeof MeetingsRoute
+  SignupRoute: typeof SignupRoute
   TasksRoute: typeof TasksRoute
   TodosRoute: typeof TodosRoute
 }
@@ -130,11 +163,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TasksRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/meetings': {
       id: '/meetings'
       path: '/meetings'
       fullPath: '/meetings'
       preLoaderRoute: typeof MeetingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/ideas': {
@@ -173,10 +220,22 @@ const rootRouteChildren: RootRouteChildren = {
   AboutRoute: AboutRoute,
   DiaryRoute: DiaryRoute,
   IdeasRoute: IdeasRoute,
+  LoginRoute: LoginRoute,
   MeetingsRoute: MeetingsRoute,
+  SignupRoute: SignupRoute,
   TasksRoute: TasksRoute,
   TodosRoute: TodosRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
