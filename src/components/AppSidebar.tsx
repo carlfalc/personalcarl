@@ -24,6 +24,8 @@ const items = [
 
 export function AppSidebar() {
   const currentPath = useRouterState({ select: (s) => s.location.pathname });
+  const [userName] = useUserName();
+
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
