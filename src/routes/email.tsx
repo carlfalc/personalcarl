@@ -44,6 +44,20 @@ function EmailPage() {
   const chunksRef = useRef<Blob[]>([]);
   const lookupTimer = useRef<number | null>(null);
 
+  // Apply prefill (from dashboard "Create email" button) on mount
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("email-prefill");
+      if (!raw) return;
+      sessionStorage.removeItem("email-prefill");
+      const p = JSON.parse(raw) as { to?: string; subject?: string; body?: string };
+      if (p.to) setTo(p.to);
+      if (p.subject) setSubject(p.subject);
+      if (p.body) setBody(p.body);
+      toast.success("Loaded email details from meeting");
+    } catch {}
+  }, []);
+
   // Debounced recipient lookup
   useEffect(() => {
     if (lookupTimer.current) window.clearTimeout(lookupTimer.current);
