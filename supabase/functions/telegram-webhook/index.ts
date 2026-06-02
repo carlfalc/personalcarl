@@ -169,6 +169,28 @@ async function composeEmail(description: string): Promise<{ subject: string; bod
   }
 }
 
+async function extractFamilyProfileDetails(text: string): Promise<{
+  contact_email: string | null;
+  contact_phone: string | null;
+  relationship: string | null;
+  birth_date: string | null;
+  has_no_more_details: boolean;
+}> {
+  try {
+    const parsed = JSON.parse(stripCodeFences(await callClaude(FAMILY_PROFILE_PROMPT, text)));
+    return {
+      contact_email: parsed.contact_email ?? null,
+      contact_phone: parsed.contact_phone ?? null,
+      relationship: parsed.relationship ?? null,
+      birth_date: parsed.birth_date ?? null,
+      has_no_more_details: Boolean(parsed.has_no_more_details),
+    };
+  } catch (e) {
+    console.error("extractFamilyProfileDetails parse error", e);
+    return { contact_email: null, contact_phone: null, relationship: null, birth_date: null, has_no_more_details: /don'?t have|no details|not sure/i.test(text) };
+  }
+}
+
 // ---------- Gmail (via Lovable gateway) ----------
 async function lookupRecipientsInGmail(query: string): Promise<Array<{ name: string; email: string }>> {
   if (!LOVABLE_API_KEY || !GOOGLE_MAIL_API_KEY) return [];
