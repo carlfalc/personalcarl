@@ -73,7 +73,7 @@ function TodayPage() {
 
   const tiles: Record<string, React.ReactNode> = {
     tasks: (
-      <Panel id="tasks" title="Today's Tasks" emoji="✅" href="/tasks">
+      <Panel title="Today's Tasks" emoji="✅" href="/tasks">
         {todaysTasks.length === 0 ? (
           <Empty>No tasks. Enjoy the quiet.</Empty>
         ) : (
@@ -95,7 +95,7 @@ function TodayPage() {
       </Panel>
     ),
     weather: (
-      <Panel id="weather" title="Weather — Today" emoji="🌤️">
+      <Panel title="Weather — Today" emoji="🌤️">
         <div className="grid grid-cols-4 gap-3 sm:grid-cols-7">
           {Array.from({ length: 7 }).map((_, i) => {
             const d = addDays(new Date(), i);
@@ -117,7 +117,7 @@ function TodayPage() {
       </Panel>
     ),
     meetings: (
-      <Panel id="meetings" title="Upcoming Meetings" emoji="📅" href="/meetings">
+      <Panel title="Upcoming Meetings" emoji="📅" href="/meetings">
         {meetings.length === 0 ? (
           <Empty>Nothing on the calendar.</Empty>
         ) : (
@@ -140,7 +140,7 @@ function TodayPage() {
       </Panel>
     ),
     diary: (
-      <Panel id="diary" title="Recent Diary" emoji="📓" href="/diary">
+      <Panel title="Recent Diary" emoji="📓" href="/diary">
         {recentDiary.length === 0 ? (
           <Empty>No entries yet.</Empty>
         ) : (
