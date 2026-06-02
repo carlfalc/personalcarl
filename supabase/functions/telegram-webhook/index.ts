@@ -272,14 +272,8 @@ async function finalizeEmailDraft(
       gmail_draft_id: draftId,
     }).eq("id", intentId);
 
-    // Also log to drafts_log so it shows in the Email page side panel
-    await supabase.from("drafts_log").insert({
-      user_id: "00000000-0000-0000-0000-000000000000", // telegram-origin marker; replace if you map chat→user
-      gmail_draft_id: draftId,
-      recipient: to,
-      subject,
-      body_preview: body.slice(0, 200),
-    }).then(({ error }) => { if (error) console.warn("drafts_log insert skipped:", error.message); });
+
+
 
     await sendTelegram(
       chatId,
