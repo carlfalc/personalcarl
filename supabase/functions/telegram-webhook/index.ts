@@ -572,6 +572,29 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // Active family profile follow-up, unless this is clearly a new command
+    const { data: familyPendingRows } = await supabase
+      .from("pending_family_profiles")
+      .select("id, memory_id, status, updated_at")
+      .eq("chat_id", chatId)
+      .eq("status", "awaiting_details")
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    const familyPending = familyPendingRows?.[0] as PendingFamilyProfile | undefined;
+    if (familyPending) {
+      const { data: familyMemory } = await supabase.from("memory").select("fact").eq("id", familyPending.memory_id).maybeSingle();
+      const handledFamily = await handlePendingFamilyProfile(supabase, chatId, transcript, {
+        ...familyPending,
+        memory_name: familyMemory?.fact ?? null,
+      });
+      if (handledFamily) {
+        return new Response(JSON.stringify({ ok: true, handled: "family_profile" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     // Active email flow takes priority
     const { data: pendingRows } = await supabase
       .from("pending_email_intents")
