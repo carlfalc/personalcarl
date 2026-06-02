@@ -489,7 +489,16 @@ function MeetingCard({ m, docs, onDel }: { m: Meeting; docs: MeetingDoc[]; onDel
   );
 }
 
-function DocumentsBlock({ meetingId, docs }: { meetingId: string; docs: MeetingDoc[] }) {
+function DocumentsBlock({
+  meetingId, docs, editing, onEditToggle, onSave, saving,
+}: {
+  meetingId: string;
+  docs: MeetingDoc[];
+  editing?: boolean;
+  onEditToggle?: () => void;
+  onSave?: () => void;
+  saving?: boolean;
+}) {
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
