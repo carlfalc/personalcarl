@@ -564,11 +564,19 @@ Deno.serve(async (req) => {
         await supabase.from("memory").update({
           category: m.category, confidence: m.confidence ?? 0.8,
           source: "telegram", updated_at: new Date().toISOString(),
+          contact_email: m.contact_email ?? null,
+          contact_phone: m.contact_phone ?? null,
+          relationship: m.relationship ?? null,
+          birth_date: m.birth_date ?? null,
         }).eq("id", existing.id);
       } else {
         await supabase.from("memory").insert({
           fact: m.fact, category: m.category,
           confidence: m.confidence ?? 0.8, source: "telegram",
+          contact_email: m.contact_email ?? null,
+          contact_phone: m.contact_phone ?? null,
+          relationship: m.relationship ?? null,
+          birth_date: m.birth_date ?? null,
         });
       }
     }
