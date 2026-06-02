@@ -29,7 +29,7 @@ const GOOGLE_MAIL_API_KEY = Deno.env.get("GOOGLE_MAIL_API_KEY")!;
 const GATEWAY = "https://connector-gateway.lovable.dev";
 
 type EntryType = "task" | "idea" | "todo" | "diary";
-type MemoryCategory = "interest" | "project" | "preference";
+type MemoryCategory = "interest" | "project" | "preference" | "family" | "business" | "technology" | "travel";
 
 interface ParsedNote {
   entries: Array<{
@@ -45,7 +45,15 @@ interface ParsedNote {
     location?: string | null;
     notes?: string | null;
   }>;
-  memory: Array<{ fact: string; category: MemoryCategory; confidence?: number }>;
+  memory: Array<{
+    fact: string;
+    category: MemoryCategory;
+    confidence?: number;
+    contact_email?: string | null;
+    contact_phone?: string | null;
+    relationship?: string | null;
+    birth_date?: string | null;
+  }>;
   email_intents: Array<{ recipient_query: string }>;
 }
 
@@ -56,13 +64,17 @@ const SYSTEM_PROMPT = `You parse a personal-assistant voice note into structured
 {
   entries: [{ type: 'task'|'idea'|'todo'|'diary', content: string, tags: string[], priority: 1|2|3, due_date: string|null }],
   meetings: [{ title: string, datetime: string, location: string|null, notes: string|null }],
-  memory: [{ fact: string, category: 'interest'|'project'|'preference', confidence: number }],
+  memory: [{ fact: string, category: 'interest'|'project'|'preference'|'family'|'business'|'technology'|'travel', confidence: number, contact_email: string|null, contact_phone: string|null, relationship: string|null, birth_date: string|null }],
   email_intents: [{ recipient_query: string }]
 }
 
 Rules:
 - email_intents: include ONLY when the user clearly asks to email/send something to someone (e.g. "send email to kitchen", "email Sarah"). recipient_query is the name/word the user used to refer to the recipient. Do NOT invent a subject or body — those are gathered in a follow-up step.
-- Scheduled items → meetings. Durable facts → memory. Reflective → diary. Empty arrays if nothing fits.`;
+- Never include email_intents for tasks, todos, meetings, ideas, diary notes, family/contact updates, birthdays, or generic "stop/cancel" messages.
+- Tasks/to-dos → entries. Ideas → entries with type "idea". Scheduled calendar appointments → meetings. Durable facts → memory. Reflective notes → diary entries.
+- Family/contact commands such as "add my sister Jane" or "add family name Jane" → memory with category "family". Put the person's name in fact if that is all you know, and fill contact_email, contact_phone, relationship, and birth_date only when provided.
+- Business, technology, and travel facts/preferences → memory with their matching category when clearly requested.
+- Empty arrays if nothing fits.`;
 
 const COMPOSE_PROMPT = `You write a short professional email on behalf of the sender, based on what they just dictated. Return ONLY valid JSON: { "subject": string, "body": string }. Keep it concise, in the sender's voice, no signature block.`;
 
