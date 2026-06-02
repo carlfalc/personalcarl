@@ -131,6 +131,48 @@ export type Database = {
         }
         Relationships: []
       }
+      pending_email_intents: {
+        Row: {
+          body: string
+          candidates: Json
+          chat_id: number
+          created_at: string
+          gmail_draft_id: string | null
+          id: string
+          recipient_email: string | null
+          recipient_name: string | null
+          status: string
+          subject: string
+          updated_at: string
+        }
+        Insert: {
+          body: string
+          candidates?: Json
+          chat_id: number
+          created_at?: string
+          gmail_draft_id?: string | null
+          id?: string
+          recipient_email?: string | null
+          recipient_name?: string | null
+          status?: string
+          subject: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          candidates?: Json
+          chat_id?: number
+          created_at?: string
+          gmail_draft_id?: string | null
+          id?: string
+          recipient_email?: string | null
+          recipient_name?: string | null
+          status?: string
+          subject?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
