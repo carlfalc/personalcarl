@@ -37,6 +37,15 @@ function AboutPage() {
   const qc = useQueryClient();
   const [fact, setFact] = useState("");
   const [category, setCategory] = useState<Memory["category"]>("interest");
+  const [userName, setUserName] = useUserName();
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(userName);
+
+  const saveName = () => {
+    setUserName(nameDraft);
+    setEditingName(false);
+  };
+
 
   const { data: memories = [] } = useQuery({
     queryKey: ["memory"],
