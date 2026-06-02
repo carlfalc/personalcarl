@@ -13,6 +13,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
+import { TopBar } from "@/components/TopBar";
 import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
@@ -122,16 +123,19 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <SidebarProvider>
-        <div className="flex min-h-screen w-full bg-background">
-          <AppSidebar />
-          <div className="flex flex-1 flex-col">
-            <header className="sticky top-0 z-10 flex h-12 items-center gap-2 border-b border-border bg-background/80 px-3 backdrop-blur">
-              <SidebarTrigger />
-              <span className="text-sm font-medium text-muted-foreground">Personal OS</span>
-            </header>
-            <main className="flex-1">
-              <Outlet />
-            </main>
+        <div className="flex min-h-screen w-full flex-col bg-background">
+          <TopBar />
+          <div className="flex flex-1 w-full">
+            <AppSidebar />
+            <div className="flex flex-1 flex-col min-w-0">
+              <div className="flex items-center gap-2 px-3 py-2 md:hidden">
+                <SidebarTrigger />
+                <span className="text-sm font-medium text-muted-foreground">Personal OS</span>
+              </div>
+              <main className="flex-1">
+                <Outlet />
+              </main>
+            </div>
           </div>
         </div>
         <Toaster />
