@@ -1,11 +1,17 @@
-// Telegram webhook — full pipeline with email-drafting round-trip.
-// - Receives Telegram updates (text or voice).
-// - If there's a pending email confirmation for this chat, treats the message
-//   as a reply (yes / no / pick-a-number / paste-an-email) and creates the
-//   Gmail draft via the Lovable connector gateway.
-// - Otherwise: transcribes, classifies with Claude into entries/meetings/memory
-//   AND optional email_intents. For each email intent, searches Gmail Sent for
-//   the recipient and asks the user to confirm in Telegram.
+// Telegram webhook — voice/text → entries + multi-step email-drafting flow.
+//
+// Email-drafting flow (one chat at a time):
+//   1. User: "send email to Kitchen"
+//      → row inserted with status='awaiting_recipient', candidates from Gmail Sent.
+//      → bot replies: "Found Kitchen <kitchen@x.com>. Is this correct? Reply yes / no / paste an email."
+//   2. User: "yes" (or "1", or pastes an email)
+//      → status becomes 'awaiting_content'.
+//      → bot replies: "Great — what should the email say?"
+//   3. User: describes the email content (voice or text).
+//      → Claude turns it into {subject, body}, draft saved to Gmail Drafts.
+//      → bot replies with confirmation + Gmail link.
+//
+// "cancel" / "no" at any stage aborts.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -25,12 +31,6 @@ const GATEWAY = "https://connector-gateway.lovable.dev";
 type EntryType = "task" | "idea" | "todo" | "diary";
 type MemoryCategory = "interest" | "project" | "preference";
 
-interface EmailIntent {
-  recipient_query: string; // e.g. "Sarah" or "sarah@" or "sarah jones"
-  subject: string;
-  body: string;
-}
-
 interface ParsedNote {
   entries: Array<{
     type: EntryType;
@@ -45,29 +45,26 @@ interface ParsedNote {
     location?: string | null;
     notes?: string | null;
   }>;
-  memory: Array<{
-    fact: string;
-    category: MemoryCategory;
-    confidence?: number;
-  }>;
-  email_intents: EmailIntent[];
+  memory: Array<{ fact: string; category: MemoryCategory; confidence?: number }>;
+  email_intents: Array<{ recipient_query: string }>;
 }
 
 const EMPTY: ParsedNote = { entries: [], meetings: [], memory: [], email_intents: [] };
 
-const SYSTEM_PROMPT = `You parse a personal-assistant voice note into structured data. Return ONLY valid JSON, no markdown, no preamble, matching:
+const SYSTEM_PROMPT = `You parse a personal-assistant voice note into structured data. Return ONLY valid JSON, no markdown, matching:
 
 {
   entries: [{ type: 'task'|'idea'|'todo'|'diary', content: string, tags: string[], priority: 1|2|3, due_date: string|null }],
   meetings: [{ title: string, datetime: string, location: string|null, notes: string|null }],
   memory: [{ fact: string, category: 'interest'|'project'|'preference', confidence: number }],
-  email_intents: [{ recipient_query: string, subject: string, body: string }]
+  email_intents: [{ recipient_query: string }]
 }
 
 Rules:
-- A single note may produce multiple items across categories.
-- email_intents: ONLY when the user clearly asks to email/send something to someone (e.g. "email Sarah about the invoice", "send John a note saying..."). recipient_query is the name or partial email the user said. Write a concise subject and a professional body in the user's voice. If the user did not ask to email anyone, return [].
-- Put scheduled/calendar items in meetings. Durable facts in memory. Reflective/journal content in diary. Empty arrays if nothing fits. Infer priority (1=high).`;
+- email_intents: include ONLY when the user clearly asks to email/send something to someone (e.g. "send email to kitchen", "email Sarah"). recipient_query is the name/word the user used to refer to the recipient. Do NOT invent a subject or body — those are gathered in a follow-up step.
+- Scheduled items → meetings. Durable facts → memory. Reflective → diary. Empty arrays if nothing fits.`;
+
+const COMPOSE_PROMPT = `You write a short professional email on behalf of the sender, based on what they just dictated. Return ONLY valid JSON: { "subject": string, "body": string }. Keep it concise, in the sender's voice, no signature block.`;
 
 // ---------- Telegram helpers ----------
 async function sendTelegram(chatId: number, text: string): Promise<void> {
@@ -77,9 +74,7 @@ async function sendTelegram(chatId: number, text: string): Promise<void> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chat_id: chatId, text }),
     });
-  } catch (e) {
-    console.error("sendTelegram failed", e);
-  }
+  } catch (e) { console.error("sendTelegram failed", e); }
 }
 
 async function downloadTelegramVoice(fileId: string): Promise<Blob> {
@@ -88,10 +83,7 @@ async function downloadTelegramVoice(fileId: string): Promise<Blob> {
   );
   const info = await infoRes.json();
   if (!info.ok) throw new Error(`getFile failed: ${JSON.stringify(info)}`);
-  const filePath = info.result.file_path as string;
-  const fileRes = await fetch(
-    `https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/${filePath}`,
-  );
+  const fileRes = await fetch(`https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/${info.result.file_path}`);
   if (!fileRes.ok) throw new Error(`download failed: ${fileRes.status}`);
   return await fileRes.blob();
 }
@@ -115,7 +107,7 @@ function stripCodeFences(s: string): string {
   return s.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
 }
 
-async function classifyWithClaude(transcript: string): Promise<ParsedNote> {
+async function callClaude(system: string, user: string): Promise<string> {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -126,15 +118,18 @@ async function classifyWithClaude(transcript: string): Promise<ParsedNote> {
     body: JSON.stringify({
       model: "claude-sonnet-4-5",
       max_tokens: 1500,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: transcript }],
+      system,
+      messages: [{ role: "user", content: user }],
     }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(`claude failed: ${JSON.stringify(data)}`);
-  const text = (data.content?.[0]?.text ?? "").toString();
+  return (data.content?.[0]?.text ?? "").toString();
+}
+
+async function classifyNote(transcript: string): Promise<ParsedNote> {
   try {
-    const parsed = JSON.parse(stripCodeFences(text));
+    const parsed = JSON.parse(stripCodeFences(await callClaude(SYSTEM_PROMPT, transcript)));
     return {
       entries: Array.isArray(parsed.entries) ? parsed.entries : [],
       meetings: Array.isArray(parsed.meetings) ? parsed.meetings : [],
@@ -142,15 +137,26 @@ async function classifyWithClaude(transcript: string): Promise<ParsedNote> {
       email_intents: Array.isArray(parsed.email_intents) ? parsed.email_intents : [],
     };
   } catch (e) {
-    console.error("Failed to parse Claude JSON:", text);
+    console.error("classifyNote parse error", e);
     return EMPTY;
   }
 }
 
+async function composeEmail(description: string): Promise<{ subject: string; body: string }> {
+  const text = await callClaude(COMPOSE_PROMPT, description);
+  try {
+    const parsed = JSON.parse(stripCodeFences(text));
+    return {
+      subject: String(parsed.subject ?? "(no subject)").slice(0, 200),
+      body: String(parsed.body ?? description),
+    };
+  } catch {
+    return { subject: "(no subject)", body: description };
+  }
+}
+
 // ---------- Gmail (via Lovable gateway) ----------
-async function lookupRecipientsInGmail(
-  query: string,
-): Promise<Array<{ name: string; email: string }>> {
+async function lookupRecipientsInGmail(query: string): Promise<Array<{ name: string; email: string }>> {
   if (!LOVABLE_API_KEY || !GOOGLE_MAIL_API_KEY) return [];
   const q = encodeURIComponent(`in:sent to:${query}`);
   const listRes = await fetch(
@@ -191,11 +197,7 @@ function base64url(input: string): string {
     .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-async function createGmailDraft(args: {
-  to: string;
-  subject: string;
-  body: string;
-}): Promise<string> {
+async function createGmailDraft(args: { to: string; subject: string; body: string }): Promise<string> {
   const rfc2822 = [
     `To: ${args.to}`,
     `Subject: ${args.subject}`,
@@ -220,126 +222,152 @@ async function createGmailDraft(args: {
   return draft.id ?? "";
 }
 
-// ---------- Email-intent handling ----------
+// ---------- Email flow ----------
 function formatRecipient(r: { name: string; email: string }): string {
   return r.name ? `${r.name} <${r.email}>` : r.email;
 }
 
-async function startEmailFlow(
+async function startRecipientFlow(
   supabase: ReturnType<typeof createClient>,
   chatId: number,
-  intent: EmailIntent,
+  recipientQuery: string,
 ): Promise<void> {
-  const matches = await lookupRecipientsInGmail(intent.recipient_query);
+  const matches = await lookupRecipientsInGmail(recipientQuery);
   const top = matches[0] ?? null;
 
   await supabase.from("pending_email_intents").insert({
     chat_id: chatId,
-    status: "awaiting_confirmation",
+    status: "awaiting_recipient",
     recipient_email: top?.email ?? null,
     recipient_name: top?.name ?? null,
     candidates: matches,
-    subject: intent.subject,
-    body: intent.body,
+    subject: "",
+    body: "",
   });
 
-  let msg = `✉️ Draft ready for "${intent.subject}".\n\n`;
+  let msg: string;
   if (matches.length === 0) {
-    msg += `Couldn't find "${intent.recipient_query}" in your Sent folder. Reply with the email address to use, or "cancel".`;
+    msg = `🔍 Couldn't find "${recipientQuery}" in your Sent folder.\nReply with the email address to use, or "cancel".`;
   } else if (matches.length === 1 && top) {
-    msg += `Send to ${formatRecipient(top)}?\nReply "yes", paste a different email, or "cancel".`;
+    msg = `📬 Found ${formatRecipient(top)}.\nIs this correct? Reply "yes", paste a different email, or "cancel".`;
   } else {
-    msg += `Found ${matches.length} matches — pick one:\n`;
+    msg = `📬 Found ${matches.length} matches for "${recipientQuery}":\n`;
     matches.forEach((r, i) => { msg += `${i + 1}. ${formatRecipient(r)}\n`; });
-    msg += `Reply with the number, paste a different email, or "cancel".`;
+    msg += `Reply with the number, paste an email, or "cancel".`;
   }
   await sendTelegram(chatId, msg);
 }
 
-async function finalizeEmailDraft(
-  supabase: ReturnType<typeof createClient>,
-  chatId: number,
-  intentId: string,
-  to: string,
-  subject: string,
-  body: string,
-): Promise<void> {
-  try {
-    const draftId = await createGmailDraft({ to, subject, body });
-    await supabase.from("pending_email_intents").update({
-      status: "drafted",
-      recipient_email: to,
-      gmail_draft_id: draftId,
-    }).eq("id", intentId);
+const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
+const YES_WORDS = ["yes", "y", "ok", "yep", "yeah", "correct", "confirm", "send", "go"];
+const CANCEL_WORDS = ["cancel", "no", "stop", "abort", "nope"];
 
-
-
-
-    await sendTelegram(
-      chatId,
-      `✅ Draft saved to Gmail for ${to}.\nOpen: https://mail.google.com/mail/u/0/#drafts`,
-    );
-  } catch (e) {
-    console.error("finalizeEmailDraft", e);
-    await sendTelegram(chatId, `⚠️ Couldn't save the draft: ${e instanceof Error ? e.message : "unknown error"}`);
-  }
+interface Pending {
+  id: string;
+  status: string;
+  recipient_email: string | null;
+  recipient_name: string | null;
+  candidates: Array<{ name: string; email: string }>;
+  subject: string;
+  body: string;
 }
 
-const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
-
-async function handlePendingReply(
+async function handleAwaitingRecipient(
   supabase: ReturnType<typeof createClient>,
   chatId: number,
   text: string,
-  pending: {
-    id: string;
-    recipient_email: string | null;
-    candidates: Array<{ name: string; email: string }>;
-    subject: string;
-    body: string;
-  },
-): Promise<boolean> {
+  pending: Pending,
+): Promise<void> {
   const trimmed = text.trim().toLowerCase();
 
-  if (["cancel", "no", "stop", "abort"].includes(trimmed)) {
+  if (CANCEL_WORDS.includes(trimmed)) {
     await supabase.from("pending_email_intents").update({ status: "cancelled" }).eq("id", pending.id);
-    await sendTelegram(chatId, "❌ Cancelled. The draft was not saved.");
-    return true;
+    await sendTelegram(chatId, "❌ Cancelled.");
+    return;
   }
+
+  let confirmedEmail: string | null = null;
+  let confirmedName: string | null = null;
 
   // Pick by number
   const num = parseInt(trimmed, 10);
   if (!isNaN(num) && num >= 1 && num <= pending.candidates.length) {
     const picked = pending.candidates[num - 1];
-    await finalizeEmailDraft(supabase, chatId, pending.id, picked.email, pending.subject, pending.body);
-    return true;
+    confirmedEmail = picked.email;
+    confirmedName = picked.name;
   }
 
-  // Pasted email address
-  const emailMatch = text.match(EMAIL_RE);
-  if (emailMatch) {
-    await finalizeEmailDraft(supabase, chatId, pending.id, emailMatch[0], pending.subject, pending.body);
-    return true;
+  // Pasted email
+  if (!confirmedEmail) {
+    const m = text.match(EMAIL_RE);
+    if (m) { confirmedEmail = m[0]; confirmedName = ""; }
   }
 
-  // Yes / confirm
-  if (["yes", "y", "ok", "yep", "yeah", "send", "confirm"].includes(trimmed)) {
+  // Yes
+  if (!confirmedEmail && YES_WORDS.includes(trimmed)) {
     if (!pending.recipient_email) {
-      await sendTelegram(chatId, "I don't have an email address yet — paste one and I'll save the draft.");
-      return true;
+      await sendTelegram(chatId, "I don't have an email address yet — paste one, or reply \"cancel\".");
+      return;
     }
-    await finalizeEmailDraft(
-      supabase, chatId, pending.id, pending.recipient_email, pending.subject, pending.body,
-    );
-    return true;
+    confirmedEmail = pending.recipient_email;
+    confirmedName = pending.recipient_name;
   }
 
-  // Unrecognised — leave intent open, gentle nudge
-  await sendTelegram(chatId, 'Reply "yes", a number (1, 2...), an email address, or "cancel".');
-  return true;
+  if (!confirmedEmail) {
+    await sendTelegram(chatId, 'Reply "yes", a number, an email address, or "cancel".');
+    return;
+  }
+
+  await supabase.from("pending_email_intents").update({
+    status: "awaiting_content",
+    recipient_email: confirmedEmail,
+    recipient_name: confirmedName,
+  }).eq("id", pending.id);
+
+  await sendTelegram(
+    chatId,
+    `✅ Got it — ${confirmedName ? `${confirmedName} <${confirmedEmail}>` : confirmedEmail}.\n\n✍️ What should the email say? Send a voice note or text and I'll draft it.`,
+  );
 }
 
-// ---------- Persistence summary ----------
+async function handleAwaitingContent(
+  supabase: ReturnType<typeof createClient>,
+  chatId: number,
+  text: string,
+  pending: Pending,
+): Promise<void> {
+  const trimmed = text.trim().toLowerCase();
+  if (CANCEL_WORDS.includes(trimmed)) {
+    await supabase.from("pending_email_intents").update({ status: "cancelled" }).eq("id", pending.id);
+    await sendTelegram(chatId, "❌ Cancelled.");
+    return;
+  }
+
+  try {
+    const { subject, body } = await composeEmail(text);
+    const draftId = await createGmailDraft({
+      to: pending.recipient_email!,
+      subject,
+      body,
+    });
+    await supabase.from("pending_email_intents").update({
+      status: "drafted",
+      subject,
+      body,
+      gmail_draft_id: draftId,
+    }).eq("id", pending.id);
+
+    await sendTelegram(
+      chatId,
+      `✅ Draft saved to Gmail.\nTo: ${pending.recipient_email}\nSubject: ${subject}\n\nOpen: https://mail.google.com/mail/u/0/#drafts`,
+    );
+  } catch (e) {
+    console.error("draft failed", e);
+    await sendTelegram(chatId, `⚠️ Couldn't save the draft: ${e instanceof Error ? e.message : "unknown"}`);
+  }
+}
+
+// ---------- Summary for non-email content ----------
 function summarise(p: ParsedNote, emailsStarted: number): string {
   const parts: string[] = [];
   const counts: Record<string, number> = {};
@@ -352,10 +380,7 @@ function summarise(p: ParsedNote, emailsStarted: number): string {
     const facts = p.memory.map((m) => m.fact).slice(0, 2).join("; ");
     msg += (msg ? " " : "") + `Noted: ${facts}.`;
   }
-  if (emailsStarted > 0) {
-    msg += (msg ? " " : "") + `📨 ${emailsStarted} email draft${emailsStarted > 1 ? "s" : ""} pending your confirmation above.`;
-  }
-  if (!msg) msg = "✅ Got it — nothing to save.";
+  if (!msg && emailsStarted === 0) msg = "✅ Got it.";
   return msg;
 }
 
@@ -368,11 +393,8 @@ Deno.serve(async (req) => {
     const update = await req.json();
     const message = update.message ?? update.edited_message;
     chatId = message?.chat?.id ?? null;
-
     if (!message || !chatId) {
-      return new Response(JSON.stringify({ ok: true, ignored: "no message" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const supabase = createClient(
@@ -380,15 +402,13 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Get text — voice or typed
     let transcript = "";
     if (message.voice?.file_id) {
-      const audio = await downloadTelegramVoice(message.voice.file_id);
-      transcript = await transcribeWithWhisper(audio);
+      transcript = await transcribeWithWhisper(await downloadTelegramVoice(message.voice.file_id));
     } else if (typeof message.text === "string") {
       transcript = message.text.trim();
     } else {
-      await sendTelegram(chatId, "Send me a voice note or text and I'll save it.");
+      await sendTelegram(chatId, "Send me a voice note or text.");
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     if (!transcript) {
@@ -396,31 +416,29 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // 1. If there's a pending email confirmation, treat this message as the reply
+    // Active email flow takes priority
     const { data: pendingRows } = await supabase
       .from("pending_email_intents")
-      .select("id, recipient_email, candidates, subject, body")
+      .select("id, status, recipient_email, recipient_name, candidates, subject, body")
       .eq("chat_id", chatId)
-      .eq("status", "awaiting_confirmation")
+      .in("status", ["awaiting_recipient", "awaiting_content"])
       .order("created_at", { ascending: false })
       .limit(1);
 
-    if (pendingRows && pendingRows.length > 0) {
-      const handled = await handlePendingReply(
-        supabase,
-        chatId,
-        transcript,
-        pendingRows[0] as never,
-      );
-      if (handled) {
-        return new Response(JSON.stringify({ ok: true, handled: "pending_email" }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+    const pending = pendingRows?.[0] as Pending | undefined;
+    if (pending) {
+      if (pending.status === "awaiting_recipient") {
+        await handleAwaitingRecipient(supabase, chatId, transcript, pending);
+      } else {
+        await handleAwaitingContent(supabase, chatId, transcript, pending);
       }
+      return new Response(JSON.stringify({ ok: true, handled: pending.status }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // 2. Normal classification
-    const parsed = await classifyWithClaude(transcript);
+    // Otherwise classify as note
+    const parsed = await classifyNote(transcript);
 
     if (parsed.entries.length) {
       const rows = parsed.entries.map((e) => ({
@@ -454,22 +472,21 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 3. Kick off email confirmation flows
-    for (const intent of parsed.email_intents) {
-      await startEmailFlow(supabase, chatId, intent);
+    // Start at most one email flow per message (simplest UX)
+    const firstIntent = parsed.email_intents[0];
+    if (firstIntent?.recipient_query) {
+      await startRecipientFlow(supabase, chatId, firstIntent.recipient_query);
     }
 
-    // 4. Final summary (only if non-email content; email flows already replied)
-    if (parsed.entries.length || parsed.meetings.length || parsed.memory.length || parsed.email_intents.length === 0) {
-      await sendTelegram(chatId, summarise(parsed, parsed.email_intents.length));
-    }
+    const summary = summarise(parsed, firstIntent ? 1 : 0);
+    if (summary) await sendTelegram(chatId, summary);
 
     return new Response(JSON.stringify({ ok: true, parsed }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
     console.error("telegram-webhook error", err);
-    if (chatId) await sendTelegram(chatId, "⚠️ Something went wrong. I'll keep trying.");
+    if (chatId) await sendTelegram(chatId, "⚠️ Something went wrong.");
     return new Response(JSON.stringify({ ok: true, error: String(err) }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
