@@ -194,3 +194,48 @@ export const updateDisplayName = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+// ---- Look up past recipients from Gmail Sent folder ----
+export const lookupRecipient = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { query: string }) =>
+    z.object({ query: z.string().min(1).max(120) }).parse(input),
+  )
+  .handler(async ({ data }) => {
+    const lovableKey = process.env.LOVABLE_API_KEY;
+    const gmailKey = process.env.GOOGLE_MAIL_API_KEY;
+    if (!lovableKey || !gmailKey) throw new Error("Gmail not connected.");
+
+    const q = encodeURIComponent(`in:sent to:${data.query}`);
+    const listRes = await fetch(
+      `${GATEWAY_BASE_URL}/google_mail/gmail/v1/users/me/messages?maxResults=10&q=${q}`,
+      { headers: { Authorization: `Bearer ${lovableKey}`, "X-Connection-Api-Key": gmailKey } },
+    );
+    if (!listRes.ok) throw new Error(`Search failed (${listRes.status})`);
+    const list = (await listRes.json()) as { messages?: Array<{ id: string }> };
+    const ids = (list.messages ?? []).slice(0, 10).map((m) => m.id);
+
+    const seen = new Map<string, { name: string; email: string }>();
+    for (const id of ids) {
+      const mres = await fetch(
+        `${GATEWAY_BASE_URL}/google_mail/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=To`,
+        { headers: { Authorization: `Bearer ${lovableKey}`, "X-Connection-Api-Key": gmailKey } },
+      );
+      if (!mres.ok) continue;
+      const msg = (await mres.json()) as { payload?: { headers?: Array<{ name: string; value: string }> } };
+      const toHeader = msg.payload?.headers?.find((h) => h.name.toLowerCase() === "to")?.value ?? "";
+      for (const part of toHeader.split(/,(?![^<]*>)/)) {
+        const m = part.trim().match(/^(?:"?([^"<]*)"?\s*)?<?([^<>\s]+@[^<>\s]+)>?$/);
+        if (!m) continue;
+        const email = m[2].toLowerCase();
+        const name = (m[1] ?? "").trim();
+        if (!seen.has(email)) seen.set(email, { email, name });
+      }
+    }
+
+    const needle = data.query.toLowerCase();
+    const ranked = [...seen.values()]
+      .filter((r) => r.email.includes(needle) || r.name.toLowerCase().includes(needle))
+      .slice(0, 5);
+    return { matches: ranked };
+  });
