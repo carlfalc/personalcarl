@@ -3,14 +3,15 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeTable } from "@/hooks/useRealtimeTable";
-import { PageHeader } from "@/components/PageHeader";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Trash2, Plus, Heart, Briefcase, Settings2 } from "lucide-react";
+import { Trash2, Plus, Heart, Briefcase, Settings2, Pencil, Check, X } from "lucide-react";
+import { useUserName } from "@/hooks/useUserName";
 
 export const Route = createFileRoute("/about")({
   head: () => ({ meta: [{ title: "About Me — Personal OS" }] }),
@@ -36,6 +37,15 @@ function AboutPage() {
   const qc = useQueryClient();
   const [fact, setFact] = useState("");
   const [category, setCategory] = useState<Memory["category"]>("interest");
+  const [userName, setUserName] = useUserName();
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(userName);
+
+  const saveName = () => {
+    setUserName(nameDraft);
+    setEditingName(false);
+  };
+
 
   const { data: memories = [] } = useQuery({
     queryKey: ["memory"],
@@ -76,10 +86,51 @@ function AboutPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-      <PageHeader
-        title="About Me"
-        subtitle="What the assistant knows about you. Edit to shape its memory."
-      />
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-semibold tracking-tight">About Me</h1>
+            {editingName ? (
+              <div className="flex items-center gap-1">
+                <Input
+                  autoFocus
+                  value={nameDraft}
+                  onChange={(e) => setNameDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") saveName();
+                    if (e.key === "Escape") { setNameDraft(userName); setEditingName(false); }
+                  }}
+                  className="h-9 w-40 text-2xl font-semibold"
+                />
+                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={saveName}>
+                  <Check className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="icon" variant="ghost" className="h-8 w-8"
+                  onClick={() => { setNameDraft(userName); setEditingName(false); }}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1">
+                <span className="text-3xl font-semibold tracking-tight text-primary">· {userName}</span>
+                <Button
+                  size="icon" variant="ghost" className="h-8 w-8"
+                  onClick={() => { setNameDraft(userName); setEditingName(true); }}
+                  aria-label="Edit name"
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            What the assistant knows about you. Edit to shape its memory.
+          </p>
+        </div>
+      </div>
+
 
       <Card className="mb-8 p-4 shadow-sm">
         <div className="flex flex-wrap gap-2">

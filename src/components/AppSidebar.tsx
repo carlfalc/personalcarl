@@ -10,6 +10,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
+import { useUserName } from "@/hooks/useUserName";
 
 const items = [
   { title: "Today",     subtitle: "Day at a glance",            url: "/",         emoji: "☀️", tint: "from-amber-200 to-orange-300" },
@@ -23,6 +24,8 @@ const items = [
 
 export function AppSidebar() {
   const currentPath = useRouterState({ select: (s) => s.location.pathname });
+  const [userName] = useUserName();
+
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
@@ -32,7 +35,7 @@ export function AppSidebar() {
             🧑‍🍳
           </div>
           <div className="flex flex-col group-data-[collapsible=icon]:hidden">
-            <span className="text-base font-bold leading-tight">Personal OS</span>
+            <span className="text-base font-bold leading-tight">{userName}'s</span>
             <span className="text-[11px] font-semibold uppercase tracking-wide text-orange-accent">
               Command Centre
             </span>
