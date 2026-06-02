@@ -346,6 +346,14 @@ interface Pending {
   updated_at?: string;
 }
 
+interface PendingFamilyProfile {
+  id: string;
+  memory_id: string;
+  status: string;
+  updated_at?: string;
+  memory?: { fact: string } | null;
+}
+
 function isCancelCommand(text: string): boolean {
   const lower = text.trim().toLowerCase();
   return CANCEL_WORDS.includes(lower) || /\b(cancel|stop|abort|forget it|never mind|nevermind)\b/i.test(lower);
@@ -368,6 +376,37 @@ function isRecipientFlowReply(text: string, pending: Pending): boolean {
     || EMAIL_RE.test(text)
     || YES_WORDS.includes(trimmed)
     || (!isNaN(num) && num >= 1 && num <= pending.candidates.length);
+}
+
+async function handlePendingFamilyProfile(
+  supabase: ReturnType<typeof createClient>,
+  chatId: number,
+  text: string,
+  pending: PendingFamilyProfile,
+): Promise<boolean> {
+  if (!isFreshPending(pending as Pending) || looksLikeNewAssistantCommand(text)) {
+    await supabase.from("pending_family_profiles").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("id", pending.id);
+    return false;
+  }
+
+  const details = await extractFamilyProfileDetails(text);
+  if (details.has_no_more_details) {
+    await supabase.from("pending_family_profiles").update({ status: "completed", updated_at: new Date().toISOString() }).eq("id", pending.id);
+    await sendTelegram(chatId, `✅ No problem — ${pending.memory?.fact ?? "that family member"} is saved.`);
+    return true;
+  }
+
+  const updates = {
+    contact_email: details.contact_email,
+    contact_phone: details.contact_phone,
+    relationship: details.relationship,
+    birth_date: details.birth_date,
+    updated_at: new Date().toISOString(),
+  };
+  await supabase.from("memory").update(updates).eq("id", pending.memory_id);
+  await supabase.from("pending_family_profiles").update({ status: "completed", updated_at: new Date().toISOString() }).eq("id", pending.id);
+  await sendTelegram(chatId, `✅ Updated ${pending.memory?.fact ?? "the family profile"}.`);
+  return true;
 }
 
 async function handleAwaitingRecipient(
