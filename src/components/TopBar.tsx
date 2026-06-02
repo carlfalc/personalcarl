@@ -16,7 +16,7 @@ export function TopBar() {
 
   return (
     <header className="bg-header text-header-foreground">
-      <div className="flex items-center justify-between gap-6 px-6 py-5 sm:px-8">
+      <div className="flex items-center justify-between gap-6 px-10 py-5 sm:px-16 lg:px-20">
         <div className="flex items-baseline gap-4 min-w-0">
           <div className="text-4xl sm:text-5xl font-bold tracking-tight tabular-nums">
             {time12}
