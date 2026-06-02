@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      birthdays: {
+        Row: {
+          birth_date: string
+          created_at: string
+          id: string
+          name: string
+          notes: string | null
+          user_id: string
+        }
+        Insert: {
+          birth_date: string
+          created_at?: string
+          id?: string
+          name: string
+          notes?: string | null
+          user_id: string
+        }
+        Update: {
+          birth_date?: string
+          created_at?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       drafts_log: {
         Row: {
           body_preview: string | null
@@ -186,6 +213,7 @@ export type Database = {
           gmail_connection_id: string | null
           gmail_email: string | null
           id: string
+          telegram_chat_id: string | null
           updated_at: string
         }
         Insert: {
@@ -194,6 +222,7 @@ export type Database = {
           gmail_connection_id?: string | null
           gmail_email?: string | null
           id: string
+          telegram_chat_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -202,6 +231,7 @@ export type Database = {
           gmail_connection_id?: string | null
           gmail_email?: string | null
           id?: string
+          telegram_chat_id?: string | null
           updated_at?: string
         }
         Relationships: []
