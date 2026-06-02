@@ -193,6 +193,36 @@ function TodayPage() {
     rescheduleMeeting.mutate({ m, newIso: input });
   };
 
+  const handleAddComment = async (m: Meeting) => {
+    const comment = window.prompt(`Add a comment for "${m.title}":`);
+    if (!comment?.trim()) return;
+    const { error } = await supabase.from("entries").insert({
+      type: "diary",
+      content: `💬 ${m.title} (${format(new Date(m.datetime), "d MMM HH:mm")}): ${comment.trim()}`,
+      tags: ["meeting", "comment"],
+      priority: 3,
+      status: "logged",
+    });
+    if (error) { toast.error(error.message); return; }
+    toast.success("Comment saved to diary");
+    qc.invalidateQueries({ queryKey: ["today-entries"] });
+  };
+
+  const handleCreateEmail = (m: Meeting) => {
+    const haystack = [m.title, m.location ?? "", (m as Meeting & { notes?: string | null }).notes ?? ""].join(" ");
+    const emails = Array.from(
+      new Set(haystack.match(/[\w.+-]+@[\w-]+\.[\w.-]+/g) ?? []),
+    );
+    try {
+      sessionStorage.setItem("email-prefill", JSON.stringify({
+        to: emails.join(", "),
+        subject: `Re: ${m.title}`,
+        body: `Hi,\n\nFollowing up on "${m.title}" (${format(new Date(m.datetime), "EEE d MMM, HH:mm")}).\n\n`,
+      }));
+    } catch {}
+    navigate({ to: "/email" });
+  };
+
   // ---- Derived lists ----
   const today = new Date().toISOString().slice(0, 10);
   const todaysTasks = entries
