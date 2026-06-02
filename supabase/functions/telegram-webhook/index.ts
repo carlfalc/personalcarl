@@ -158,38 +158,74 @@ async function composeEmail(description: string): Promise<{ subject: string; bod
 // ---------- Gmail (via Lovable gateway) ----------
 async function lookupRecipientsInGmail(query: string): Promise<Array<{ name: string; email: string }>> {
   if (!LOVABLE_API_KEY || !GOOGLE_MAIL_API_KEY) return [];
-  const q = encodeURIComponent(`in:sent to:${query}`);
-  const listRes = await fetch(
-    `${GATEWAY}/google_mail/gmail/v1/users/me/messages?maxResults=10&q=${q}`,
-    { headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "X-Connection-Api-Key": GOOGLE_MAIL_API_KEY } },
-  );
-  if (!listRes.ok) return [];
-  const list = await listRes.json();
-  const ids: string[] = (list.messages ?? []).slice(0, 10).map((m: { id: string }) => m.id);
+
+  // Broad lookup: the user may say "info at the Avenue Hotel" — match the
+  // local-part ("info"), domain ("avenuehotel"), display name, or any word.
+  // Search both Sent (people the user emails) and the rest of the mailbox
+  // (people who've emailed the user), then score by term overlap.
+  const lower = query.trim().toLowerCase();
+  const words = lower
+    .split(/[^a-z0-9@.]+/i)
+    .filter((w) => w && !["the", "a", "an", "at", "to", "for", "from", "of"].includes(w));
+  const phrase = words.join(" ");
+  const compact = words.join("");
+
+  const terms = new Set<string>();
+  if (phrase) terms.add(phrase);
+  if (compact && compact !== phrase) terms.add(compact);
+  for (const w of words) if (w.length >= 3) terms.add(w);
+  if (!terms.size) terms.add(lower);
+
+  const queries: string[] = [];
+  for (const t of terms) {
+    queries.push(`in:sent to:${t}`);
+    queries.push(`in:anywhere from:${t}`);
+    queries.push(`in:anywhere ${t}`);
+  }
+
+  const ids = new Set<string>();
+  for (const q of queries) {
+    const res = await fetch(
+      `${GATEWAY}/google_mail/gmail/v1/users/me/messages?maxResults=8&q=${encodeURIComponent(q)}`,
+      { headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "X-Connection-Api-Key": GOOGLE_MAIL_API_KEY } },
+    );
+    if (!res.ok) continue;
+    const list = await res.json();
+    for (const m of (list.messages ?? []).slice(0, 8)) ids.add(m.id);
+    if (ids.size >= 30) break;
+  }
 
   const seen = new Map<string, { name: string; email: string }>();
-  for (const id of ids) {
+  for (const id of [...ids].slice(0, 30)) {
     const mres = await fetch(
-      `${GATEWAY}/google_mail/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=To`,
+      `${GATEWAY}/google_mail/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=To&metadataHeaders=From&metadataHeaders=Cc`,
       { headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "X-Connection-Api-Key": GOOGLE_MAIL_API_KEY } },
     );
     if (!mres.ok) continue;
     const msg = await mres.json();
-    const toHeader: string = msg.payload?.headers?.find(
-      (h: { name: string }) => h.name.toLowerCase() === "to",
-    )?.value ?? "";
-    for (const part of toHeader.split(/,(?![^<]*>)/)) {
-      const m = part.trim().match(/^(?:"?([^"<]*)"?\s*)?<?([^<>\s]+@[^<>\s]+)>?$/);
-      if (!m) continue;
-      const email = m[2].toLowerCase();
-      const name = (m[1] ?? "").trim();
-      if (!seen.has(email)) seen.set(email, { email, name });
+    const headers: Array<{ name: string; value: string }> = msg.payload?.headers ?? [];
+    for (const h of headers) {
+      const hn = h.name.toLowerCase();
+      if (hn !== "to" && hn !== "from" && hn !== "cc") continue;
+      for (const part of (h.value ?? "").split(/,(?![^<]*>)/)) {
+        const m = part.trim().match(/^(?:"?([^"<]*)"?\s*)?<?([^<>\s]+@[^<>\s]+)>?$/);
+        if (!m) continue;
+        const email = m[2].toLowerCase();
+        const dn = (m[1] ?? "").trim().replace(/^"|"$/g, "");
+        if (!seen.has(email)) seen.set(email, { email, name: dn });
+      }
     }
   }
-  const needle = query.toLowerCase();
-  return [...seen.values()]
-    .filter((r) => r.email.includes(needle) || r.name.toLowerCase().includes(needle))
-    .slice(0, 5);
+
+  const scored = [...seen.values()].map((r) => {
+    const hay = `${r.name} ${r.email}`.toLowerCase();
+    let score = 0;
+    for (const t of terms) if (hay.includes(t)) score += t.length;
+    return { r, score };
+  }).filter((x) => x.score > 0);
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, 5).map((x) => x.r);
 }
 
 function base64url(input: string): string {
