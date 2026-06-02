@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeTable } from "@/hooks/useRealtimeTable";
 import { Card } from "@/components/ui/card";
 
-type Birthday = { id: string; name: string; birth_date: string };
+type Entry = { id: string; name: string; birth_date: string; source: "birthdays" | "family" };
 
 function daysUntil(birthDate: string): number {
   const today = new Date();
@@ -17,12 +17,21 @@ function daysUntil(birthDate: string): number {
 
 export function BirthdayBanner() {
   useRealtimeTable("birthdays", ["birthdays-upcoming"]);
+  useRealtimeTable("memory", ["birthdays-upcoming"]);
   const { data = [] } = useQuery({
     queryKey: ["birthdays-upcoming"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("birthdays").select("id,name,birth_date");
-      if (error) throw error;
-      return data as Birthday[];
+      const [b, m] = await Promise.all([
+        supabase.from("birthdays").select("id,name,birth_date"),
+        supabase.from("memory").select("id,fact,birth_date").eq("category", "family").not("birth_date", "is", null),
+      ]);
+      if (b.error) throw b.error;
+      if (m.error) throw m.error;
+      const list: Entry[] = [
+        ...(b.data ?? []).map((r) => ({ id: r.id, name: r.name, birth_date: r.birth_date, source: "birthdays" as const })),
+        ...(m.data ?? []).map((r) => ({ id: r.id, name: r.fact, birth_date: r.birth_date as string, source: "family" as const })),
+      ];
+      return list;
     },
   });
 
@@ -41,11 +50,11 @@ export function BirthdayBanner() {
         </span>
         <div className="min-w-0 flex-1">
           <div className="text-xs font-semibold uppercase tracking-wide text-rose-600">
-            Upcoming birthdays
+            Birthdays this week
           </div>
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm font-medium text-foreground">
             {upcoming.map((b) => (
-              <span key={b.id}>
+              <span key={`${b.source}-${b.id}`}>
                 🎂 {b.name} —{" "}
                 {b.days === 0 ? "today" : b.days === 1 ? "tomorrow" : `in ${b.days} days`}
               </span>
