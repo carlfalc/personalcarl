@@ -1,28 +1,25 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeTable } from "@/hooks/useRealtimeTable";
 import { WeekStrip } from "@/components/WeekStrip";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { GripVertical, CheckSquare, BookOpen, Sparkles, Cloud, CloudRain, Sun } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { cancelCalendarEvent, rescheduleCalendarEvent } from "@/lib/meetings.functions";
+import {
+  GripVertical, Cloud, CloudRain, Sun, Check, X, CalendarClock, Lightbulb,
+} from "lucide-react";
 import { addDays, format } from "date-fns";
 import {
-  DndContext,
-  closestCenter,
-  PointerSensor,
-  KeyboardSensor,
-  useSensor,
-  useSensors,
+  DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
 import {
-  SortableContext,
-  arrayMove,
-  rectSortingStrategy,
-  sortableKeyboardCoordinates,
-  useSortable,
+  SortableContext, arrayMove, rectSortingStrategy, sortableKeyboardCoordinates, useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
@@ -36,19 +33,39 @@ export const Route = createFileRoute("/")({
   component: TodayPage,
 });
 
+type Entry = {
+  id: string;
+  type: string;
+  content: string;
+  status: string | null;
+  priority: number | null;
+  due_date: string | null;
+  created_at: string;
+};
+
+type Meeting = {
+  id: string;
+  title: string;
+  datetime: string;
+  location: string | null;
+  status: string | null;
+  google_event_id: string | null;
+};
+
 function TodayPage() {
   useRealtimeTable("entries", ["today-entries"]);
   useRealtimeTable("meetings", ["today-meetings"]);
+  const qc = useQueryClient();
+  const cancelEvent = useServerFn(cancelCalendarEvent);
+  const rescheduleEvent = useServerFn(rescheduleCalendarEvent);
 
   const { data: entries = [] } = useQuery({
     queryKey: ["today-entries"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("entries")
-        .select("*")
-        .order("created_at", { ascending: false });
+        .from("entries").select("*").order("created_at", { ascending: false });
       if (error) throw error;
-      return data;
+      return data as Entry[];
     },
   });
 
@@ -56,20 +73,139 @@ function TodayPage() {
     queryKey: ["today-meetings"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("meetings")
-        .select("*")
-        .order("datetime", { ascending: true })
-        .limit(8);
+        .from("meetings").select("*").order("datetime", { ascending: true }).limit(12);
       if (error) throw error;
-      return data;
+      return data as Meeting[];
     },
   });
 
+  // ---- Task actions ----
+  const completeTask = useMutation({
+    mutationFn: async (t: Entry) => {
+      const { error } = await supabase.from("entries")
+        .update({ status: "done" }).eq("id", t.id);
+      if (error) throw error;
+      // Log to diary so completed work shows up in monthly review.
+      await supabase.from("entries").insert({
+        type: "diary",
+        content: `✅ Completed task: ${t.content}`,
+        tags: ["completed", "task"],
+        priority: 3,
+        status: "logged",
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["today-entries"] });
+      toast.success("Task completed and logged to diary");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
+  });
+
+  const deleteTask = useMutation({
+    mutationFn: async (t: Entry) => {
+      const { error } = await supabase.from("entries")
+        .update({ status: "deleted" }).eq("id", t.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["today-entries"] });
+      toast.success("Task removed");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
+  });
+
+  // ---- Meeting actions ----
+  const cancelMeeting = useMutation({
+    mutationFn: async (m: Meeting) => {
+      if (m.google_event_id) {
+        try {
+          await cancelEvent({ data: { eventId: m.google_event_id } });
+        } catch (e) {
+          console.warn("Google Calendar cancel failed", e);
+        }
+      }
+      const { error } = await supabase.from("meetings")
+        .update({ status: "cancelled" }).eq("id", m.id);
+      if (error) throw error;
+      await supabase.from("entries").insert({
+        type: "diary",
+        content: `❌ Cancelled meeting: ${m.title} (${format(new Date(m.datetime), "d MMM HH:mm")})`,
+        tags: ["cancelled", "meeting"],
+        priority: 3,
+        status: "logged",
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["today-meetings"] });
+      toast.success("Meeting cancelled");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
+  });
+
+  const rescheduleMeeting = useMutation({
+    mutationFn: async ({ m, newIso }: { m: Meeting; newIso: string }) => {
+      const start = new Date(newIso);
+      if (isNaN(start.getTime())) throw new Error("Invalid date");
+      const oldStart = new Date(m.datetime);
+      const oldEnd = new Date(oldStart.getTime() + 60 * 60 * 1000);
+      const durationMs = oldEnd.getTime() - oldStart.getTime();
+      const end = new Date(start.getTime() + durationMs);
+
+      if (m.google_event_id) {
+        try {
+          await rescheduleEvent({
+            data: {
+              eventId: m.google_event_id,
+              startIso: start.toISOString(),
+              endIso: end.toISOString(),
+            },
+          });
+        } catch (e) {
+          console.warn("Google Calendar reschedule failed", e);
+        }
+      }
+      const { error } = await supabase.from("meetings")
+        .update({ datetime: start.toISOString(), status: "rescheduled" })
+        .eq("id", m.id);
+      if (error) throw error;
+      await supabase.from("entries").insert({
+        type: "diary",
+        content: `🔄 Rescheduled meeting: ${m.title} → ${format(start, "d MMM HH:mm")}`,
+        tags: ["rescheduled", "meeting"],
+        priority: 3,
+        status: "logged",
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["today-meetings"] });
+      toast.success("Meeting rescheduled");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
+  });
+
+  const handleReschedule = (m: Meeting) => {
+    const current = format(new Date(m.datetime), "yyyy-MM-dd'T'HH:mm");
+    const input = window.prompt("New date & time (YYYY-MM-DDTHH:MM):", current);
+    if (!input) return;
+    rescheduleMeeting.mutate({ m, newIso: input });
+  };
+
+  // ---- Derived lists ----
   const today = new Date().toISOString().slice(0, 10);
   const todaysTasks = entries
-    .filter((e) => e.type === "task" && (e.due_date === today || e.status !== "done"))
+    .filter((e) =>
+      e.type === "task" &&
+      e.status !== "done" &&
+      e.status !== "deleted" &&
+      (e.due_date === today || !e.due_date),
+    )
     .slice(0, 6);
   const recentDiary = entries.filter((e) => e.type === "diary").slice(0, 3);
+  const recentIdeas = entries.filter((e) => e.type === "idea").slice(0, 4);
+
+  const upcomingMeetings = meetings
+    .filter((m) => m.status !== "cancelled" && new Date(m.datetime).getTime() >= Date.now() - 60 * 60 * 1000)
+    .slice(0, 5);
 
   const tiles: Record<string, React.ReactNode> = {
     tasks: (
@@ -78,16 +214,28 @@ function TodayPage() {
           <Empty>No tasks. Enjoy the quiet.</Empty>
         ) : (
           <div className="divide-y divide-border/60">
-            <div className="grid grid-cols-[1fr_auto_auto] gap-4 pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              <span>Task</span><span>Priority</span><span>Status</span>
-            </div>
             {todaysTasks.map((t) => (
-              <div key={t.id} className="grid grid-cols-[1fr_auto_auto] items-center gap-4 py-3 text-sm">
-                <span className={t.status === "done" ? "line-through text-muted-foreground" : ""}>
-                  {t.content}
-                </span>
+              <div key={t.id} className="flex items-center gap-3 py-3 text-sm">
+                <span className="flex-1 truncate">{t.content}</span>
                 <Badge variant="outline" className="text-[10px]">P{t.priority ?? 3}</Badge>
-                <Badge variant="secondary" className="text-[10px]">{t.status ?? "open"}</Badge>
+                <div className="flex items-center gap-1" onPointerDown={(e) => e.stopPropagation()}>
+                  <Button
+                    size="icon" variant="ghost"
+                    className="h-7 w-7 text-emerald-600 hover:bg-emerald-50"
+                    title="Mark completed"
+                    onClick={() => completeTask.mutate(t)}
+                  >
+                    <Check className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    size="icon" variant="ghost"
+                    className="h-7 w-7 text-muted-foreground hover:bg-red-50 hover:text-red-600"
+                    title="Delete (not required)"
+                    onClick={() => deleteTask.mutate(t)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
@@ -118,20 +266,36 @@ function TodayPage() {
     ),
     meetings: (
       <Panel title="Upcoming Meetings" emoji="📅" href="/meetings">
-        {meetings.length === 0 ? (
+        {upcomingMeetings.length === 0 ? (
           <Empty>Nothing on the calendar.</Empty>
         ) : (
           <div className="space-y-3">
-            {meetings.map((m) => (
-              <div key={m.id} className="flex items-baseline justify-between gap-4">
-                <div>
-                  <div className="text-sm font-semibold">{m.title}</div>
-                  {m.location && (
-                    <div className="text-xs text-muted-foreground">{m.location}</div>
-                  )}
+            {upcomingMeetings.map((m) => (
+              <div key={m.id} className="flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold">{m.title}</div>
+                  <div className="text-xs text-muted-foreground tabular-nums">
+                    {format(new Date(m.datetime), "EEE d MMM · HH:mm")}
+                    {m.location && <> · {m.location}</>}
+                  </div>
                 </div>
-                <div className="shrink-0 text-xs font-medium text-muted-foreground tabular-nums">
-                  {format(new Date(m.datetime), "EEE d MMM · HH:mm")}
+                <div className="flex shrink-0 items-center gap-1" onPointerDown={(e) => e.stopPropagation()}>
+                  <Button
+                    size="icon" variant="ghost"
+                    className="h-7 w-7 text-orange-accent"
+                    title="Reschedule"
+                    onClick={() => handleReschedule(m)}
+                  >
+                    <CalendarClock className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    size="icon" variant="ghost"
+                    className="h-7 w-7 text-muted-foreground hover:text-red-600"
+                    title="Cancel"
+                    onClick={() => cancelMeeting.mutate(m)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
             ))}
@@ -157,9 +321,30 @@ function TodayPage() {
         )}
       </Panel>
     ),
+    ideas: (
+      <Panel title="Recent Ideas" emoji="💡" href="/ideas">
+        {recentIdeas.length === 0 ? (
+          <Empty>No ideas captured yet.</Empty>
+        ) : (
+          <div className="space-y-3">
+            {recentIdeas.map((i) => (
+              <div key={i.id} className="flex items-start gap-2">
+                <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-orange-accent" />
+                <div className="min-w-0">
+                  <div className="line-clamp-2 text-sm">{i.content}</div>
+                  <div className="text-[11px] text-muted-foreground">
+                    {format(new Date(i.created_at), "d MMM")}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
+    ),
   };
 
-  const DEFAULT_ORDER = ["tasks", "weather", "meetings", "diary"];
+  const DEFAULT_ORDER = ["tasks", "weather", "meetings", "ideas", "diary"];
   const [order, setOrder] = useState<string[]>(DEFAULT_ORDER);
 
   useEffect(() => {
@@ -167,9 +352,9 @@ function TodayPage() {
       const saved = localStorage.getItem("dashboard-tile-order");
       if (saved) {
         const parsed = JSON.parse(saved) as string[];
-        if (Array.isArray(parsed) && parsed.every((k) => k in tiles)) {
-          // include any new tiles not in saved order at the end
-          const merged = [...parsed, ...DEFAULT_ORDER.filter((k) => !parsed.includes(k))];
+        if (Array.isArray(parsed)) {
+          const filtered = parsed.filter((k) => k in tiles);
+          const merged = [...filtered, ...DEFAULT_ORDER.filter((k) => !filtered.includes(k))];
           setOrder(merged);
         }
       }
@@ -237,15 +422,9 @@ const WEATHER = [
 ];
 
 function Panel({
-  title,
-  emoji,
-  href,
-  children,
+  title, emoji, href, children,
 }: {
-  title: string;
-  emoji: string;
-  href?: string;
-  children: React.ReactNode;
+  title: string; emoji: string; href?: string; children: React.ReactNode;
 }) {
   return (
     <Card className="rounded-3xl border-border/60 bg-card p-5 shadow-sm">
