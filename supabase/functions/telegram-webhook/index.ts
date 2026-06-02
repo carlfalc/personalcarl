@@ -351,7 +351,7 @@ interface PendingFamilyProfile {
   memory_id: string;
   status: string;
   updated_at?: string;
-  memory?: { fact: string } | null;
+  memory_name?: string | null;
 }
 
 function isCancelCommand(text: string): boolean {
@@ -392,7 +392,7 @@ async function handlePendingFamilyProfile(
   const details = await extractFamilyProfileDetails(text);
   if (details.has_no_more_details) {
     await supabase.from("pending_family_profiles").update({ status: "completed", updated_at: new Date().toISOString() }).eq("id", pending.id);
-    await sendTelegram(chatId, `✅ No problem — ${pending.memory?.fact ?? "that family member"} is saved.`);
+    await sendTelegram(chatId, `✅ No problem — ${pending.memory_name ?? "that family member"} is saved.`);
     return true;
   }
 
@@ -405,7 +405,7 @@ async function handlePendingFamilyProfile(
   };
   await supabase.from("memory").update(updates).eq("id", pending.memory_id);
   await supabase.from("pending_family_profiles").update({ status: "completed", updated_at: new Date().toISOString() }).eq("id", pending.id);
-  await sendTelegram(chatId, `✅ Updated ${pending.memory?.fact ?? "the family profile"}.`);
+  await sendTelegram(chatId, `✅ Updated ${pending.memory_name ?? "the family profile"}.`);
   return true;
 }
 
