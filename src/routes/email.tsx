@@ -7,39 +7,27 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Mic, MicOff, Sparkles, Send, Mail, Link as LinkIcon, Unlink } from "lucide-react";
+import { Mic, MicOff, Sparkles, Send, Mail } from "lucide-react";
 import { toast } from "sonner";
 import {
-  startGmailConnect,
-  saveGmailConnection,
-  disconnectGmail,
   transcribeAudio,
   polishToEmail,
   createGmailDraft,
   listRecentDrafts,
-  getMyProfile,
 } from "@/lib/email.functions";
-import { connectAppUser } from "@/integrations/lovable/appUserConnectorClient";
 
 export const Route = createFileRoute("/email")({
   head: () => ({ meta: [{ title: "Email — Voice Drafts" }] }),
   component: EmailPage,
 });
 
-const GATEWAY_BASE_URL = "https://connector-gateway.lovable.dev";
-
 function EmailPage() {
   const qc = useQueryClient();
-  const startConnect = useServerFn(startGmailConnect);
-  const saveConn = useServerFn(saveGmailConnection);
-  const disconnect = useServerFn(disconnectGmail);
   const transcribe = useServerFn(transcribeAudio);
   const polish = useServerFn(polishToEmail);
   const createDraft = useServerFn(createGmailDraft);
   const listDrafts = useServerFn(listRecentDrafts);
-  const getProfile = useServerFn(getMyProfile);
 
-  const profileQ = useQuery({ queryKey: ["my-profile"], queryFn: () => getProfile() });
   const draftsQ = useQuery({ queryKey: ["recent-drafts"], queryFn: () => listDrafts() });
 
   const [recording, setRecording] = useState(false);
@@ -50,25 +38,6 @@ function EmailPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-
-  const connectGmail = async () => {
-    const result = await connectAppUser({
-      connectorId: "google",
-      gatewayBaseUrl: GATEWAY_BASE_URL,
-      start: (targetOrigin) =>
-        startConnect({ data: { targetOrigin, returnUrl: window.location.href } }),
-    });
-    if (!result.success) return toast.error(result.error ?? "Failed");
-    await saveConn({ data: { connectionId: result.connectionId! } });
-    toast.success("Gmail connected");
-    qc.invalidateQueries({ queryKey: ["my-profile"] });
-  };
-
-  const handleDisconnect = async () => {
-    await disconnect();
-    qc.invalidateQueries({ queryKey: ["my-profile"] });
-    toast.success("Disconnected");
-  };
 
   const startRecording = async () => {
     try {
@@ -134,8 +103,6 @@ function EmailPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const connected = !!profileQ.data?.gmail_connection_id;
-
   return (
     <div className="p-6 md:p-8 max-w-4xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
@@ -147,29 +114,6 @@ function EmailPage() {
           <p className="text-sm text-muted-foreground">Speak, polish with AI, save to your Gmail Drafts folder.</p>
         </div>
       </div>
-
-      <Card className="p-5 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className={`h-2.5 w-2.5 rounded-full ${connected ? "bg-emerald-500" : "bg-gray-300"}`} />
-          <div>
-            <div className="font-medium">
-              {connected ? "Gmail connected" : "Gmail not connected"}
-            </div>
-            {profileQ.data?.gmail_email && (
-              <div className="text-xs text-muted-foreground">{profileQ.data.gmail_email}</div>
-            )}
-          </div>
-        </div>
-        {connected ? (
-          <Button variant="outline" size="sm" onClick={handleDisconnect}>
-            <Unlink className="h-4 w-4 mr-2" /> Disconnect
-          </Button>
-        ) : (
-          <Button onClick={connectGmail}>
-            <LinkIcon className="h-4 w-4 mr-2" /> Connect Gmail
-          </Button>
-        )}
-      </Card>
 
       <Card className="p-6 space-y-4">
         <div className="flex flex-col items-center gap-3 py-4">
@@ -217,14 +161,11 @@ function EmailPage() {
         <Button
           className="w-full"
           onClick={() => handleSaveDraft.mutate()}
-          disabled={!connected || !subject.trim() || !body.trim() || handleSaveDraft.isPending}
+          disabled={!subject.trim() || !body.trim() || handleSaveDraft.isPending}
         >
           <Send className="h-4 w-4 mr-2" />
           {handleSaveDraft.isPending ? "Saving…" : "Save to Gmail Drafts"}
         </Button>
-        {!connected && (
-          <p className="text-xs text-center text-muted-foreground">Connect Gmail above to save drafts.</p>
-        )}
       </Card>
 
       {draftsQ.data && draftsQ.data.length > 0 && (
