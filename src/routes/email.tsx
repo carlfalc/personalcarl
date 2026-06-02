@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -7,13 +7,14 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Mic, MicOff, Sparkles, Send, Mail } from "lucide-react";
+import { Mic, MicOff, Sparkles, Send, Mail, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import {
   transcribeAudio,
   polishToEmail,
   createGmailDraft,
   listRecentDrafts,
+  lookupRecipient,
 } from "@/lib/email.functions";
 
 export const Route = createFileRoute("/email")({
@@ -27,6 +28,7 @@ function EmailPage() {
   const polish = useServerFn(polishToEmail);
   const createDraft = useServerFn(createGmailDraft);
   const listDrafts = useServerFn(listRecentDrafts);
+  const lookup = useServerFn(lookupRecipient);
 
   const draftsQ = useQuery({ queryKey: ["recent-drafts"], queryFn: () => listDrafts() });
 
@@ -36,8 +38,33 @@ function EmailPage() {
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<Array<{ name: string; email: string }>>([]);
+  const [showSuggest, setShowSuggest] = useState(false);
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const lookupTimer = useRef<number | null>(null);
+
+  // Debounced recipient lookup
+  useEffect(() => {
+    if (lookupTimer.current) window.clearTimeout(lookupTimer.current);
+    const q = to.trim();
+    if (q.length < 2 || q.includes("@")) {
+      setSuggestions([]);
+      return;
+    }
+    lookupTimer.current = window.setTimeout(async () => {
+      try {
+        const res = await lookup({ data: { query: q } });
+        setSuggestions(res.matches);
+        setShowSuggest(true);
+      } catch {
+        setSuggestions([]);
+      }
+    }, 400);
+    return () => {
+      if (lookupTimer.current) window.clearTimeout(lookupTimer.current);
+    };
+  }, [to, lookup]);
 
   const startRecording = async () => {
     try {
@@ -103,8 +130,17 @@ function EmailPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const loadDraft = (d: { recipient: string | null; subject: string | null; body_preview: string | null }) => {
+    setTo(d.recipient ?? "");
+    setSubject(d.subject ?? "");
+    setBody(d.body_preview ?? "");
+    setTranscript("");
+    toast.info("Loaded into compose — edit and re-save");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   return (
-    <div className="p-6 md:p-8 max-w-4xl mx-auto space-y-6">
+    <div className="p-6 md:p-8 max-w-6xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
         <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-rose-200 to-rose-400 flex items-center justify-center">
           <Mail className="h-6 w-6" />
@@ -115,83 +151,134 @@ function EmailPage() {
         </div>
       </div>
 
-      <Card className="p-6 space-y-4">
-        <div className="flex flex-col items-center gap-3 py-4">
-          <Button
-            size="lg"
-            variant={recording ? "destructive" : "default"}
-            className="h-20 w-20 rounded-full"
-            onClick={recording ? stopRecording : startRecording}
-            disabled={!!busy}
-          >
-            {recording ? <MicOff className="h-8 w-8" /> : <Mic className="h-8 w-8" />}
-          </Button>
-          <div className="text-sm text-muted-foreground">
-            {recording ? "Recording… tap to stop" : busy ?? "Tap mic to record your message"}
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Transcript</Label>
-          <Textarea
-            value={transcript}
-            onChange={(e) => setTranscript(e.target.value)}
-            placeholder="Your voice will appear here. You can also type."
-            rows={4}
-          />
-          <Button variant="secondary" onClick={handlePolish} disabled={!transcript.trim() || !!busy}>
-            <Sparkles className="h-4 w-4 mr-2" /> Polish into email
-          </Button>
-        </div>
-      </Card>
-
-      <Card className="p-6 space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="to">To</Label>
-          <Input id="to" value={to} onChange={(e) => setTo(e.target.value)} placeholder="recipient@example.com" />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="subject">Subject</Label>
-          <Input id="subject" value={subject} onChange={(e) => setSubject(e.target.value)} />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="body">Body</Label>
-          <Textarea id="body" value={body} onChange={(e) => setBody(e.target.value)} rows={8} />
-        </div>
-        <Button
-          className="w-full"
-          onClick={() => handleSaveDraft.mutate()}
-          disabled={!subject.trim() || !body.trim() || handleSaveDraft.isPending}
-        >
-          <Send className="h-4 w-4 mr-2" />
-          {handleSaveDraft.isPending ? "Saving…" : "Save to Gmail Drafts"}
-        </Button>
-      </Card>
-
-      {draftsQ.data && draftsQ.data.length > 0 && (
-        <Card className="p-5 space-y-3">
-          <h2 className="font-semibold">Recent drafts</h2>
-          <div className="space-y-2">
-            {draftsQ.data.map((d) => (
-              <div key={d.id} className="text-sm border-b last:border-0 pb-2">
-                <div className="font-medium">{d.subject}</div>
-                <div className="text-xs text-muted-foreground">
-                  {d.recipient || "(no recipient)"} · {new Date(d.created_at).toLocaleString()}
-                </div>
-                <div className="text-xs text-muted-foreground line-clamp-1">{d.body_preview}</div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Compose column */}
+        <div className="lg:col-span-2 space-y-6">
+          <Card className="p-6 space-y-4">
+            <div className="flex flex-col items-center gap-3 py-4">
+              <Button
+                size="lg"
+                variant={recording ? "destructive" : "default"}
+                className="h-20 w-20 rounded-full"
+                onClick={recording ? stopRecording : startRecording}
+                disabled={!!busy}
+              >
+                {recording ? <MicOff className="h-8 w-8" /> : <Mic className="h-8 w-8" />}
+              </Button>
+              <div className="text-sm text-muted-foreground">
+                {recording ? "Recording… tap to stop" : busy ?? "Tap mic to record your message"}
               </div>
-            ))}
-          </div>
-          <a
-            href="https://mail.google.com/mail/u/0/#drafts"
-            target="_blank"
-            rel="noreferrer"
-            className="text-xs text-primary inline-flex items-center gap-1"
-          >
-            Open Gmail Drafts ↗
-          </a>
-        </Card>
-      )}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Transcript</Label>
+              <Textarea
+                value={transcript}
+                onChange={(e) => setTranscript(e.target.value)}
+                placeholder="Your voice will appear here. You can also type."
+                rows={4}
+              />
+              <Button variant="secondary" onClick={handlePolish} disabled={!transcript.trim() || !!busy}>
+                <Sparkles className="h-4 w-4 mr-2" /> Polish into email
+              </Button>
+            </div>
+          </Card>
+
+          <Card className="p-6 space-y-4">
+            <div className="space-y-2 relative">
+              <Label htmlFor="to">To</Label>
+              <Input
+                id="to"
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+                onFocus={() => setShowSuggest(true)}
+                onBlur={() => window.setTimeout(() => setShowSuggest(false), 150)}
+                placeholder="Type a name or email — searches your past Gmail recipients"
+              />
+              {showSuggest && suggestions.length > 0 && (
+                <div className="absolute z-10 left-0 right-0 mt-1 bg-popover border rounded-md shadow-md max-h-60 overflow-auto">
+                  {suggestions.map((s) => (
+                    <button
+                      key={s.email}
+                      type="button"
+                      className="w-full text-left px-3 py-2 hover:bg-accent text-sm"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        setTo(s.email);
+                        setShowSuggest(false);
+                      }}
+                    >
+                      <div className="font-medium">{s.name || s.email}</div>
+                      {s.name && <div className="text-xs text-muted-foreground">{s.email}</div>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="subject">Subject</Label>
+              <Input id="subject" value={subject} onChange={(e) => setSubject(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="body">Body</Label>
+              <Textarea id="body" value={body} onChange={(e) => setBody(e.target.value)} rows={8} />
+            </div>
+            <Button
+              className="w-full"
+              onClick={() => handleSaveDraft.mutate()}
+              disabled={!subject.trim() || !body.trim() || handleSaveDraft.isPending}
+            >
+              <Send className="h-4 w-4 mr-2" />
+              {handleSaveDraft.isPending ? "Saving…" : "Save to Gmail Drafts"}
+            </Button>
+          </Card>
+        </div>
+
+        {/* Drafts log column */}
+        <div className="lg:col-span-1">
+          <Card className="p-5 space-y-3 sticky top-6 bg-rose-50/40 dark:bg-rose-950/10 border-rose-200/60">
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold">Completed drafts</h2>
+              <a
+                href="https://mail.google.com/mail/u/0/#drafts"
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-primary inline-flex items-center gap-1"
+                title="Open Gmail Drafts"
+              >
+                Gmail <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Click any draft to load it back into compose for editing.
+            </p>
+            {!draftsQ.data || draftsQ.data.length === 0 ? (
+              <div className="text-sm text-muted-foreground py-6 text-center">
+                No drafts yet — save one to see it here.
+              </div>
+            ) : (
+              <div className="space-y-1 max-h-[60vh] overflow-auto pr-1">
+                {draftsQ.data.map((d) => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => loadDraft(d)}
+                    className="w-full text-left rounded-md px-3 py-2 hover:bg-rose-100/60 dark:hover:bg-rose-900/20 transition border border-transparent hover:border-rose-200"
+                  >
+                    <div className="font-medium text-sm line-clamp-1">{d.subject || "(no subject)"}</div>
+                    <div className="text-xs text-muted-foreground line-clamp-1">
+                      {d.recipient || "(no recipient)"}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">
+                      {new Date(d.created_at).toLocaleString()}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }
