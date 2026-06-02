@@ -146,7 +146,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          body: string
+          body?: string
           candidates?: Json
           chat_id: number
           created_at?: string
@@ -155,7 +155,7 @@ export type Database = {
           recipient_email?: string | null
           recipient_name?: string | null
           status?: string
-          subject: string
+          subject?: string
           updated_at?: string
         }
         Update: {

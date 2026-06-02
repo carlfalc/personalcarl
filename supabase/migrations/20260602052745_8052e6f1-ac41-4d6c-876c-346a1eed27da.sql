@@ -1,0 +1,1 @@
+ALTER TABLE public.pending_email_intents ALTER COLUMN subject SET DEFAULT '', ALTER COLUMN body SET DEFAULT '';
