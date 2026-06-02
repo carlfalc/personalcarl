@@ -81,25 +81,31 @@ export type Database = {
         Row: {
           created_at: string
           datetime: string
+          google_event_id: string | null
           id: string
           location: string | null
           notes: string | null
+          status: string
           title: string
         }
         Insert: {
           created_at?: string
           datetime: string
+          google_event_id?: string | null
           id?: string
           location?: string | null
           notes?: string | null
+          status?: string
           title: string
         }
         Update: {
           created_at?: string
           datetime?: string
+          google_event_id?: string | null
           id?: string
           location?: string | null
           notes?: string | null
+          status?: string
           title?: string
         }
         Relationships: []
