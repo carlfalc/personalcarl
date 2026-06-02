@@ -242,7 +242,7 @@ function TodayPage() {
 
   const tiles: Record<string, React.ReactNode> = {
     tasks: (
-      <Panel title="Today's Tasks" emoji="✅" href="/tasks">
+      <Panel title="Today's Tasks" emoji="✅" href="/tasks" addHref="/tasks">
         {todaysTasks.length === 0 ? (
           <Empty>No tasks. Enjoy the quiet.</Empty>
         ) : (
@@ -298,7 +298,7 @@ function TodayPage() {
       </Panel>
     ),
     meetings: (
-      <Panel title="Upcoming Meetings" emoji="📅" href="/meetings">
+      <Panel title="Upcoming Meetings" emoji="📅" href="/meetings" addHref="/meetings">
         {upcomingMeetings.length === 0 ? (
           <Empty>Nothing on the calendar.</Empty>
         ) : (
@@ -313,6 +313,22 @@ function TodayPage() {
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1" onPointerDown={(e) => e.stopPropagation()}>
+                  <Button
+                    size="icon" variant="ghost"
+                    className="h-7 w-7 text-blue-600"
+                    title="Add meeting comment (saves to diary)"
+                    onClick={() => handleAddComment(m)}
+                  >
+                    <MessageSquarePlus className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    size="icon" variant="ghost"
+                    className="h-7 w-7 text-rose-500"
+                    title="Create email"
+                    onClick={() => handleCreateEmail(m)}
+                  >
+                    <Mail className="h-4 w-4" />
+                  </Button>
                   <Button
                     size="icon" variant="ghost"
                     className="h-7 w-7 text-orange-accent"
@@ -337,7 +353,7 @@ function TodayPage() {
       </Panel>
     ),
     diary: (
-      <Panel title="Recent Diary" emoji="📓" href="/diary">
+      <Panel title="Recent Diary" emoji="📓" href="/diary" addHref="/diary">
         {recentDiary.length === 0 ? (
           <Empty>No entries yet.</Empty>
         ) : (
@@ -355,7 +371,7 @@ function TodayPage() {
       </Panel>
     ),
     ideas: (
-      <Panel title="Recent Ideas" emoji="💡" href="/ideas">
+      <Panel title="Recent Ideas" emoji="💡" href="/ideas" addHref="/ideas">
         {recentIdeas.length === 0 ? (
           <Empty>No ideas captured yet.</Empty>
         ) : (
