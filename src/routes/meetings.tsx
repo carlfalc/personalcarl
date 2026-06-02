@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeTable } from "@/hooks/useRealtimeTable";
@@ -9,8 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Trash2, Plus, MapPin, Clock } from "lucide-react";
+import { Trash2, Plus, MapPin, Clock, Paperclip, Upload, FileIcon, X } from "lucide-react";
 import { format } from "date-fns";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/meetings")({
   head: () => ({ meta: [{ title: "Meetings — Personal OS" }] }),
@@ -25,8 +26,18 @@ type Meeting = {
   notes: string | null;
 };
 
+type MeetingDoc = {
+  id: string;
+  meeting_id: string;
+  file_path: string;
+  filename: string;
+  size_bytes: number | null;
+  mime_type: string | null;
+};
+
 function MeetingsPage() {
   useRealtimeTable("meetings", ["meetings"]);
+  useRealtimeTable("meeting_documents", ["meeting-documents"]);
   const qc = useQueryClient();
   const [form, setForm] = useState({ title: "", datetime: "", location: "", notes: "" });
 
@@ -37,6 +48,16 @@ function MeetingsPage() {
         .from("meetings").select("*").order("datetime", { ascending: true });
       if (error) throw error;
       return data as Meeting[];
+    },
+  });
+
+  const { data: docs = [] } = useQuery({
+    queryKey: ["meeting-documents"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("meeting_documents").select("*").order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as MeetingDoc[];
     },
   });
 
@@ -53,7 +74,9 @@ function MeetingsPage() {
     onSuccess: () => {
       setForm({ title: "", datetime: "", location: "", notes: "" });
       qc.invalidateQueries({ queryKey: ["meetings"] });
+      toast.success("Meeting added");
     },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const del = useMutation({
@@ -67,6 +90,7 @@ function MeetingsPage() {
   const now = Date.now();
   const upcoming = meetings.filter((m) => new Date(m.datetime).getTime() >= now);
   const past = meetings.filter((m) => new Date(m.datetime).getTime() < now);
+  const docsByMeeting = (mid: string) => docs.filter((d) => d.meeting_id === mid);
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 lg:px-8">
@@ -95,11 +119,12 @@ function MeetingsPage() {
               placeholder="Zoom, office…"
             />
           </Field>
-          <Field label="Notes" className="sm:col-span-2">
+          <Field label="Notes (include emails / phones to use them later)" className="sm:col-span-2">
             <Textarea
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
               rows={2}
+              placeholder="With: Jane (jane@acme.com, +64 21 123 4567)…"
             />
           </Field>
         </div>
@@ -113,10 +138,21 @@ function MeetingsPage() {
         </div>
       </Card>
 
-      <Section title="Upcoming" items={upcoming} onDel={(id) => del.mutate(id)} />
+      <Section
+        title="Upcoming"
+        items={upcoming}
+        docsByMeeting={docsByMeeting}
+        onDel={(id) => del.mutate(id)}
+      />
       {past.length > 0 && (
         <div className="mt-8">
-          <Section title="Past" items={past} onDel={(id) => del.mutate(id)} faded />
+          <Section
+            title="Past"
+            items={past}
+            docsByMeeting={docsByMeeting}
+            onDel={(id) => del.mutate(id)}
+            faded
+          />
         </div>
       )}
     </div>
@@ -133,8 +169,14 @@ function Field({ label, children, className }: { label: string; children: React.
 }
 
 function Section({
-  title, items, onDel, faded,
-}: { title: string; items: Meeting[]; onDel: (id: string) => void; faded?: boolean }) {
+  title, items, onDel, faded, docsByMeeting,
+}: {
+  title: string;
+  items: Meeting[];
+  onDel: (id: string) => void;
+  faded?: boolean;
+  docsByMeeting: (mid: string) => MeetingDoc[];
+}) {
   if (items.length === 0) {
     return (
       <>
@@ -175,9 +217,129 @@ function Section({
                 <Trash2 className="h-4 w-4 text-muted-foreground" />
               </Button>
             </div>
+
+            <DocumentsBlock meetingId={m.id} docs={docsByMeeting(m.id)} />
           </Card>
         ))}
       </div>
     </>
   );
+}
+
+function DocumentsBlock({ meetingId, docs }: { meetingId: string; docs: MeetingDoc[] }) {
+  const qc = useQueryClient();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        const safeName = file.name.replace(/[^\w.\-]+/g, "_");
+        const path = `${meetingId}/${Date.now()}-${safeName}`;
+        const { error: upErr } = await supabase.storage
+          .from("meeting-documents")
+          .upload(path, file, { contentType: file.type || undefined });
+        if (upErr) throw upErr;
+        const { error: insErr } = await supabase.from("meeting_documents").insert({
+          meeting_id: meetingId,
+          file_path: path,
+          filename: file.name,
+          size_bytes: file.size,
+          mime_type: file.type || null,
+        });
+        if (insErr) throw insErr;
+      }
+      toast.success(`${files.length} file(s) uploaded`);
+      qc.invalidateQueries({ queryKey: ["meeting-documents"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const handleOpen = async (d: MeetingDoc) => {
+    const { data, error } = await supabase.storage
+      .from("meeting-documents")
+      .createSignedUrl(d.file_path, 60 * 10);
+    if (error || !data) { toast.error("Could not open file"); return; }
+    window.open(data.signedUrl, "_blank", "noopener");
+  };
+
+  const handleDelete = async (d: MeetingDoc) => {
+    if (!window.confirm(`Delete "${d.filename}"?`)) return;
+    try {
+      await supabase.storage.from("meeting-documents").remove([d.file_path]);
+      const { error } = await supabase.from("meeting_documents").delete().eq("id", d.id);
+      if (error) throw error;
+      qc.invalidateQueries({ queryKey: ["meeting-documents"] });
+      toast.success("File deleted");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Delete failed");
+    }
+  };
+
+  return (
+    <div className="mt-3 border-t border-border/60 pt-3">
+      <div className="mb-2 flex items-center justify-between">
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+          <Paperclip className="h-3.5 w-3.5" />
+          Attachments {docs.length > 0 && <span>({docs.length})</span>}
+        </div>
+        <Button
+          variant="ghost" size="sm"
+          className="h-7 text-xs"
+          disabled={uploading}
+          onClick={() => fileRef.current?.click()}
+        >
+          <Upload className="mr-1 h-3.5 w-3.5" />
+          {uploading ? "Uploading…" : "Upload"}
+        </Button>
+        <input
+          ref={fileRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => handleUpload(e.target.files)}
+        />
+      </div>
+      {docs.length > 0 && (
+        <ul className="space-y-1">
+          {docs.map((d) => (
+            <li key={d.id} className="flex items-center gap-2 rounded-md bg-muted/40 px-2 py-1 text-xs">
+              <FileIcon className="h-3.5 w-3.5 text-muted-foreground" />
+              <button
+                type="button"
+                onClick={() => handleOpen(d)}
+                className="flex-1 truncate text-left hover:underline"
+                title={d.filename}
+              >
+                {d.filename}
+              </button>
+              {d.size_bytes != null && (
+                <span className="text-muted-foreground">{formatSize(d.size_bytes)}</span>
+              )}
+              <Button
+                variant="ghost" size="icon"
+                className="h-6 w-6"
+                onClick={() => handleDelete(d)}
+                title="Delete"
+              >
+                <X className="h-3.5 w-3.5 text-muted-foreground" />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function formatSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }

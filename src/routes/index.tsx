@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
@@ -13,6 +13,7 @@ import { cancelCalendarEvent, rescheduleCalendarEvent } from "@/lib/meetings.fun
 import { BirthdayBanner } from "@/components/BirthdayBanner";
 import {
   GripVertical, Cloud, CloudRain, Sun, Check, X, CalendarClock, Lightbulb,
+  Plus, MessageSquarePlus, Mail,
 } from "lucide-react";
 import { addDays, format } from "date-fns";
 import {
@@ -57,6 +58,7 @@ function TodayPage() {
   useRealtimeTable("entries", ["today-entries"]);
   useRealtimeTable("meetings", ["today-meetings"]);
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const cancelEvent = useServerFn(cancelCalendarEvent);
   const rescheduleEvent = useServerFn(rescheduleCalendarEvent);
 
@@ -191,6 +193,36 @@ function TodayPage() {
     rescheduleMeeting.mutate({ m, newIso: input });
   };
 
+  const handleAddComment = async (m: Meeting) => {
+    const comment = window.prompt(`Add a comment for "${m.title}":`);
+    if (!comment?.trim()) return;
+    const { error } = await supabase.from("entries").insert({
+      type: "diary",
+      content: `💬 ${m.title} (${format(new Date(m.datetime), "d MMM HH:mm")}): ${comment.trim()}`,
+      tags: ["meeting", "comment"],
+      priority: 3,
+      status: "logged",
+    });
+    if (error) { toast.error(error.message); return; }
+    toast.success("Comment saved to diary");
+    qc.invalidateQueries({ queryKey: ["today-entries"] });
+  };
+
+  const handleCreateEmail = (m: Meeting) => {
+    const haystack = [m.title, m.location ?? "", (m as Meeting & { notes?: string | null }).notes ?? ""].join(" ");
+    const emails = Array.from(
+      new Set(haystack.match(/[\w.+-]+@[\w-]+\.[\w.-]+/g) ?? []),
+    );
+    try {
+      sessionStorage.setItem("email-prefill", JSON.stringify({
+        to: emails.join(", "),
+        subject: `Re: ${m.title}`,
+        body: `Hi,\n\nFollowing up on "${m.title}" (${format(new Date(m.datetime), "EEE d MMM, HH:mm")}).\n\n`,
+      }));
+    } catch {}
+    navigate({ to: "/email" });
+  };
+
   // ---- Derived lists ----
   const today = new Date().toISOString().slice(0, 10);
   const todaysTasks = entries
@@ -210,7 +242,7 @@ function TodayPage() {
 
   const tiles: Record<string, React.ReactNode> = {
     tasks: (
-      <Panel title="Today's Tasks" emoji="✅" href="/tasks">
+      <Panel title="Today's Tasks" emoji="✅" href="/tasks" addHref="/tasks">
         {todaysTasks.length === 0 ? (
           <Empty>No tasks. Enjoy the quiet.</Empty>
         ) : (
@@ -266,7 +298,7 @@ function TodayPage() {
       </Panel>
     ),
     meetings: (
-      <Panel title="Upcoming Meetings" emoji="📅" href="/meetings">
+      <Panel title="Upcoming Meetings" emoji="📅" href="/meetings" addHref="/meetings">
         {upcomingMeetings.length === 0 ? (
           <Empty>Nothing on the calendar.</Empty>
         ) : (
@@ -281,6 +313,22 @@ function TodayPage() {
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1" onPointerDown={(e) => e.stopPropagation()}>
+                  <Button
+                    size="icon" variant="ghost"
+                    className="h-7 w-7 text-blue-600"
+                    title="Add meeting comment (saves to diary)"
+                    onClick={() => handleAddComment(m)}
+                  >
+                    <MessageSquarePlus className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    size="icon" variant="ghost"
+                    className="h-7 w-7 text-rose-500"
+                    title="Create email"
+                    onClick={() => handleCreateEmail(m)}
+                  >
+                    <Mail className="h-4 w-4" />
+                  </Button>
                   <Button
                     size="icon" variant="ghost"
                     className="h-7 w-7 text-orange-accent"
@@ -305,7 +353,7 @@ function TodayPage() {
       </Panel>
     ),
     diary: (
-      <Panel title="Recent Diary" emoji="📓" href="/diary">
+      <Panel title="Recent Diary" emoji="📓" href="/diary" addHref="/diary">
         {recentDiary.length === 0 ? (
           <Empty>No entries yet.</Empty>
         ) : (
@@ -323,7 +371,7 @@ function TodayPage() {
       </Panel>
     ),
     ideas: (
-      <Panel title="Recent Ideas" emoji="💡" href="/ideas">
+      <Panel title="Recent Ideas" emoji="💡" href="/ideas" addHref="/ideas">
         {recentIdeas.length === 0 ? (
           <Empty>No ideas captured yet.</Empty>
         ) : (
@@ -424,9 +472,9 @@ const WEATHER = [
 ];
 
 function Panel({
-  title, emoji, href, children,
+  title, emoji, href, addHref, children,
 }: {
-  title: string; emoji: string; href?: string; children: React.ReactNode;
+  title: string; emoji: string; href?: string; addHref?: string; children: React.ReactNode;
 }) {
   return (
     <Card className="rounded-3xl border-border/60 bg-card p-5 shadow-sm">
@@ -435,7 +483,16 @@ function Panel({
           <span className="text-lg">{emoji}</span>
           <h3 className="text-base font-bold">{title}</h3>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2" onPointerDown={(e) => e.stopPropagation()}>
+          {addHref && (
+            <Link
+              to={addHref}
+              className="inline-flex items-center gap-1 rounded-full bg-orange-accent/10 px-2.5 py-1 text-xs font-semibold text-orange-accent hover:bg-orange-accent/20"
+              title="Add new"
+            >
+              <Plus className="h-3.5 w-3.5" /> Add
+            </Link>
+          )}
           {href && (
             <Link to={href} className="text-xs font-medium text-orange-accent hover:underline">
               View all
