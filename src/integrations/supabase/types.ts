@@ -236,6 +236,45 @@ export type Database = {
         }
         Relationships: []
       }
+      schedules: {
+        Row: {
+          created_at: string
+          day_of_week: number | null
+          enabled: boolean
+          frequency: string
+          id: string
+          last_run: string | null
+          prompt: string
+          time_of_day: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          day_of_week?: number | null
+          enabled?: boolean
+          frequency: string
+          id?: string
+          last_run?: string | null
+          prompt: string
+          time_of_day?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          day_of_week?: number | null
+          enabled?: boolean
+          frequency?: string
+          id?: string
+          last_run?: string | null
+          prompt?: string
+          time_of_day?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
