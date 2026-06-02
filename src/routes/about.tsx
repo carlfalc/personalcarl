@@ -10,7 +10,8 @@ import { Card } from "@/components/ui/card";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Trash2, Plus, Heart, Briefcase, Settings2 } from "lucide-react";
+import { Trash2, Plus, Heart, Briefcase, Settings2, Pencil, Check, X } from "lucide-react";
+import { useUserName } from "@/hooks/useUserName";
 
 export const Route = createFileRoute("/about")({
   head: () => ({ meta: [{ title: "About Me — Personal OS" }] }),
