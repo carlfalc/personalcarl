@@ -77,7 +77,7 @@ function SchedulesPage() {
     mutationFn: async () => {
       if (!userId) throw new Error("Not signed in");
       if (!form.title.trim() || !form.prompt.trim()) throw new Error("Title and prompt required");
-      const payload: Record<string, unknown> = {
+      const { error } = await supabase.from("schedules").insert({
         user_id: userId,
         title: form.title.trim(),
         prompt: form.prompt.trim(),
@@ -85,8 +85,7 @@ function SchedulesPage() {
         enabled: form.enabled,
         time_of_day: form.frequency === "hourly" ? null : form.time_of_day + ":00",
         day_of_week: form.frequency === "weekly" ? parseInt(form.day_of_week, 10) : null,
-      };
-      const { error } = await supabase.from("schedules").insert(payload);
+      });
       if (error) throw error;
     },
     onSuccess: () => {
