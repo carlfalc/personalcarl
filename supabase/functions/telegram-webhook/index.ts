@@ -643,6 +643,7 @@ Deno.serve(async (req) => {
       const { error } = await supabase.from("meetings").insert(rows);
       if (error) console.error("meetings insert error", error);
     }
+    let familyFollowUp: { memory_id: string; name: string } | null = null;
     for (const m of parsed.memory) {
       const { data: existing } = await supabase
         .from("memory").select("id").eq("fact", m.fact).maybeSingle();
@@ -655,16 +656,30 @@ Deno.serve(async (req) => {
           relationship: m.relationship ?? null,
           birth_date: m.birth_date ?? null,
         }).eq("id", existing.id);
+        if (m.category === "family" && (!m.contact_email || !m.contact_phone || !m.relationship || !m.birth_date)) {
+          familyFollowUp = { memory_id: existing.id, name: m.fact };
+        }
       } else {
-        await supabase.from("memory").insert({
+        const { data: inserted } = await supabase.from("memory").insert({
           fact: m.fact, category: m.category,
           confidence: m.confidence ?? 0.8, source: "telegram",
           contact_email: m.contact_email ?? null,
           contact_phone: m.contact_phone ?? null,
           relationship: m.relationship ?? null,
           birth_date: m.birth_date ?? null,
-        });
+        }).select("id").maybeSingle();
+        if (m.category === "family" && inserted?.id && (!m.contact_email || !m.contact_phone || !m.relationship || !m.birth_date)) {
+          familyFollowUp = { memory_id: inserted.id, name: m.fact };
+        }
       }
+    }
+
+    if (familyFollowUp) {
+      await supabase.from("pending_family_profiles").insert({
+        chat_id: chatId,
+        memory_id: familyFollowUp.memory_id,
+        status: "awaiting_details",
+      });
     }
 
     // Start at most one email flow per message (simplest UX)
@@ -675,6 +690,9 @@ Deno.serve(async (req) => {
 
     const summary = summarise(parsed, firstIntent ? 1 : 0);
     if (summary) await sendTelegram(chatId, summary);
+    if (familyFollowUp) {
+      await sendTelegram(chatId, `👤 I added ${familyFollowUp.name} as family. Send any profile details you have — relationship, phone, email, address or birthday. If you don't have them, just say "I don't have it".`);
+    }
 
     return new Response(JSON.stringify({ ok: true, parsed }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
