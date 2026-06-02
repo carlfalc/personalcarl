@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Trash2, Plus, MapPin, Clock, Paperclip, Upload, FileIcon, X, Mail } from "lucide-react";
+import { Trash2, Plus, MapPin, Clock, Paperclip, Upload, FileIcon, X, Mail, Pencil, Check } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { createCalendarEvent } from "@/lib/meetings.functions";
