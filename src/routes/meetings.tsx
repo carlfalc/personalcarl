@@ -366,39 +366,126 @@ function Section({
       <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">{title}</h2>
       <div className={`space-y-3 ${faded ? "opacity-70" : ""}`}>
         {items.map((m) => (
-          <Card key={m.id} className="group p-4 shadow-sm transition hover:shadow-md">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1">
-                <div className="font-medium">{m.title}</div>
-                <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    {format(new Date(m.datetime), "EEE d MMM, HH:mm")}
-                  </span>
-                  {m.location && (
-                    <span className="flex items-center gap-1">
-                      <MapPin className="h-3 w-3" /> {m.location}
-                    </span>
-                  )}
-                </div>
-                {m.notes && (
-                  <p className="mt-2 whitespace-pre-wrap text-sm text-foreground/80">{m.notes}</p>
-                )}
-              </div>
-              <Button
-                variant="ghost" size="icon"
-                className="opacity-0 transition group-hover:opacity-100"
-                onClick={() => onDel(m.id)}
-              >
-                <Trash2 className="h-4 w-4 text-muted-foreground" />
-              </Button>
-            </div>
-
-            <DocumentsBlock meetingId={m.id} docs={docsByMeeting(m.id)} />
-          </Card>
+          <MeetingCard key={m.id} m={m} docs={docsByMeeting(m.id)} onDel={onDel} />
         ))}
       </div>
     </>
+  );
+}
+
+function toLocalInputValue(iso: string) {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function MeetingCard({ m, docs, onDel }: { m: Meeting; docs: MeetingDoc[]; onDel: (id: string) => void }) {
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({
+    title: m.title,
+    datetime: toLocalInputValue(m.datetime),
+    location: m.location ?? "",
+    notes: m.notes ?? "",
+  });
+
+  const startEdit = () => {
+    setDraft({
+      title: m.title,
+      datetime: toLocalInputValue(m.datetime),
+      location: m.location ?? "",
+      notes: m.notes ?? "",
+    });
+    setEditing(true);
+  };
+
+  const save = useMutation({
+    mutationFn: async () => {
+      if (!draft.title.trim() || !draft.datetime) throw new Error("Title and date are required");
+      const { error } = await supabase.from("meetings").update({
+        title: draft.title.trim(),
+        datetime: new Date(draft.datetime).toISOString(),
+        location: draft.location || null,
+        notes: draft.notes || null,
+      }).eq("id", m.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setEditing(false);
+      qc.invalidateQueries({ queryKey: ["meetings"] });
+      toast.success("Meeting updated");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Card className="group p-4 shadow-sm transition hover:shadow-md">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1">
+          {editing ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Input
+                value={draft.title}
+                onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+                placeholder="Title"
+              />
+              <Input
+                type="datetime-local"
+                value={draft.datetime}
+                onChange={(e) => setDraft({ ...draft, datetime: e.target.value })}
+              />
+              <Input
+                value={draft.location}
+                onChange={(e) => setDraft({ ...draft, location: e.target.value })}
+                placeholder="Location"
+                className="sm:col-span-2"
+              />
+              <Textarea
+                value={draft.notes}
+                onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
+                rows={3}
+                placeholder="Notes"
+                className="sm:col-span-2"
+              />
+            </div>
+          ) : (
+            <>
+              <div className="font-medium">{m.title}</div>
+              <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  {format(new Date(m.datetime), "EEE d MMM, HH:mm")}
+                </span>
+                {m.location && (
+                  <span className="flex items-center gap-1">
+                    <MapPin className="h-3 w-3" /> {m.location}
+                  </span>
+                )}
+              </div>
+              {m.notes && (
+                <p className="mt-2 whitespace-pre-wrap text-sm text-foreground/80">{m.notes}</p>
+              )}
+            </>
+          )}
+        </div>
+        <Button
+          variant="ghost" size="icon"
+          className="opacity-0 transition group-hover:opacity-100"
+          onClick={() => onDel(m.id)}
+        >
+          <Trash2 className="h-4 w-4 text-muted-foreground" />
+        </Button>
+      </div>
+
+      <DocumentsBlock
+        meetingId={m.id}
+        docs={docs}
+        editing={editing}
+        onEditToggle={() => (editing ? setEditing(false) : startEdit())}
+        onSave={() => save.mutate()}
+        saving={save.isPending}
+      />
+    </Card>
   );
 }
 
