@@ -561,15 +561,46 @@ function DocumentsBlock({
           <Paperclip className="h-3.5 w-3.5" />
           Attachments {docs.length > 0 && <span>({docs.length})</span>}
         </div>
-        <Button
-          variant="ghost" size="sm"
-          className="h-7 text-xs"
-          disabled={uploading}
-          onClick={() => fileRef.current?.click()}
-        >
-          <Upload className="mr-1 h-3.5 w-3.5" />
-          {uploading ? "Uploading…" : "Upload"}
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost" size="sm"
+            className="h-7 text-xs"
+            disabled={uploading}
+            onClick={() => fileRef.current?.click()}
+          >
+            <Upload className="mr-1 h-3.5 w-3.5" />
+            {uploading ? "Uploading…" : "Upload"}
+          </Button>
+          {onEditToggle && (
+            editing ? (
+              <>
+                <Button
+                  variant="default" size="sm" className="h-7 text-xs"
+                  disabled={saving}
+                  onClick={onSave}
+                >
+                  <Check className="mr-1 h-3.5 w-3.5" />
+                  {saving ? "Saving…" : "Save"}
+                </Button>
+                <Button
+                  variant="ghost" size="sm" className="h-7 text-xs"
+                  onClick={onEditToggle}
+                >
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="ghost" size="sm" className="h-7 text-xs"
+                onClick={onEditToggle}
+                title="Edit meeting"
+              >
+                <Pencil className="mr-1 h-3.5 w-3.5" />
+                Edit
+              </Button>
+            )
+          )}
+        </div>
         <input
           ref={fileRef}
           type="file"
