@@ -78,6 +78,8 @@ Rules:
 
 const COMPOSE_PROMPT = `You write a short professional email on behalf of the sender, based on what they just dictated. Return ONLY valid JSON: { "subject": string, "body": string }. Keep it concise, in the sender's voice, no signature block.`;
 
+const FAMILY_PROFILE_PROMPT = `Extract family contact/profile details from the user's reply. Return ONLY valid JSON: { "contact_email": string|null, "contact_phone": string|null, "relationship": string|null, "birth_date": string|null, "has_no_more_details": boolean }. Use YYYY-MM-DD for birth_date when possible. If they say they don't have the details, set has_no_more_details true.`;
+
 // ---------- Telegram helpers ----------
 async function sendTelegram(chatId: number, text: string): Promise<void> {
   try {
