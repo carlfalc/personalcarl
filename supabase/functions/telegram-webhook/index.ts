@@ -309,6 +309,7 @@ async function startRecipientFlow(
 const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 const YES_WORDS = ["yes", "y", "ok", "yep", "yeah", "correct", "confirm", "send", "go"];
 const CANCEL_WORDS = ["cancel", "no", "stop", "abort", "nope"];
+const EMAIL_FLOW_TIMEOUT_MS = 30 * 60 * 1000;
 
 interface Pending {
   id: string;
@@ -318,6 +319,31 @@ interface Pending {
   candidates: Array<{ name: string; email: string }>;
   subject: string;
   body: string;
+  updated_at?: string;
+}
+
+function isCancelCommand(text: string): boolean {
+  const lower = text.trim().toLowerCase();
+  return CANCEL_WORDS.includes(lower) || /\b(cancel|stop|abort|forget it|never mind|nevermind)\b/i.test(lower);
+}
+
+function looksLikeNewAssistantCommand(text: string): boolean {
+  return /\b(add|create|organise|organize|schedule|book|make|save|remember|note|record)\b/i.test(text)
+    || /\b(task|todo|to-do|meeting|appointment|idea|diary|family|birthday|business|technology|travel)\b/i.test(text);
+}
+
+function isFreshPending(pending: Pending): boolean {
+  if (!pending.updated_at) return true;
+  return Date.now() - new Date(pending.updated_at).getTime() <= EMAIL_FLOW_TIMEOUT_MS;
+}
+
+function isRecipientFlowReply(text: string, pending: Pending): boolean {
+  const trimmed = text.trim().toLowerCase();
+  const num = parseInt(trimmed, 10);
+  return isCancelCommand(text)
+    || EMAIL_RE.test(text)
+    || YES_WORDS.includes(trimmed)
+    || (!isNaN(num) && num >= 1 && num <= pending.candidates.length);
 }
 
 async function handleAwaitingRecipient(
