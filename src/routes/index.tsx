@@ -230,7 +230,7 @@ function TodayPage() {
       e.type === "task" &&
       e.status !== "done" &&
       e.status !== "deleted" &&
-      (e.due_date === today || !e.due_date),
+      (!e.due_date || e.due_date <= today),
     )
     .slice(0, 6);
   const recentDiary = entries.filter((e) => e.type === "diary").slice(0, 3);
