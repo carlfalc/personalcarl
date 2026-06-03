@@ -230,7 +230,7 @@ function TodayPage() {
       e.type === "task" &&
       e.status !== "done" &&
       e.status !== "deleted" &&
-      (e.due_date === today || !e.due_date),
+      (!e.due_date || e.due_date <= today),
     )
     .slice(0, 6);
   const recentDiary = entries.filter((e) => e.type === "diary").slice(0, 3);
@@ -455,7 +455,16 @@ function SortableTile({ id, children }: { id: string; children: React.ReactNode 
     opacity: isDragging ? 0.85 : 1,
   };
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="touch-none">
+    <div ref={setNodeRef} style={style} className="relative">
+      <button
+        type="button"
+        aria-label="Drag to reorder"
+        className="absolute right-3 top-3 z-10 flex h-8 w-8 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground/60 hover:bg-muted hover:text-foreground active:cursor-grabbing"
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
       {children}
     </div>
   );
@@ -483,7 +492,7 @@ function Panel({
           <span className="text-lg">{emoji}</span>
           <h3 className="text-base font-bold">{title}</h3>
         </div>
-        <div className="flex items-center gap-2" onPointerDown={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 pr-10">
           {addHref && (
             <Link
               to={addHref}
@@ -498,7 +507,6 @@ function Panel({
               View all
             </Link>
           )}
-          <GripVertical className="h-4 w-4 text-muted-foreground/50" />
         </div>
       </div>
       {children}
