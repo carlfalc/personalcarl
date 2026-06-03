@@ -492,7 +492,7 @@ function Panel({
           <span className="text-lg">{emoji}</span>
           <h3 className="text-base font-bold">{title}</h3>
         </div>
-        <div className="flex items-center gap-2" onPointerDown={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 pr-10">
           {addHref && (
             <Link
               to={addHref}
@@ -507,7 +507,6 @@ function Panel({
               View all
             </Link>
           )}
-          <GripVertical className="h-4 w-4 text-muted-foreground/50" />
         </div>
       </div>
       {children}
