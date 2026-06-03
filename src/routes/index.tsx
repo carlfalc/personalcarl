@@ -455,7 +455,16 @@ function SortableTile({ id, children }: { id: string; children: React.ReactNode 
     opacity: isDragging ? 0.85 : 1,
   };
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="touch-none">
+    <div ref={setNodeRef} style={style} className="relative">
+      <button
+        type="button"
+        aria-label="Drag to reorder"
+        className="absolute right-3 top-3 z-10 flex h-8 w-8 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground/60 hover:bg-muted hover:text-foreground active:cursor-grabbing"
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
       {children}
     </div>
   );
