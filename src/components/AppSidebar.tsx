@@ -36,13 +36,20 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarHeader className="bg-sidebar">
         <div className="flex items-center gap-3 px-2 py-3">
-          <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-orange-300 to-orange-500 text-xl shadow-sm">
+          <Link
+            to="/settings"
+            title="Change profile picture"
+            className="group/avatar relative flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-orange-300 to-orange-500 text-xl shadow-sm transition hover:ring-2 hover:ring-orange-accent"
+          >
             {avatarUrl ? (
               <img src={avatarUrl} alt={`${userName}'s avatar`} className="h-full w-full object-cover" />
             ) : (
               <span>🧑‍🍳</span>
             )}
-          </div>
+            <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/50 text-[10px] font-semibold uppercase tracking-wide text-white opacity-0 transition group-hover/avatar:opacity-100">
+              Edit
+            </span>
+          </Link>
           <div className="flex flex-col group-data-[collapsible=icon]:hidden">
             <span className="text-base font-bold leading-tight">{userName}'s</span>
             <span className="text-[11px] font-semibold uppercase tracking-wide text-orange-accent">
