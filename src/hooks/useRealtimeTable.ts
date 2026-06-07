@@ -5,18 +5,29 @@ import { supabase } from "@/integrations/supabase/client";
 export function useRealtimeTable(table: string, queryKey: unknown[]) {
   const qc = useQueryClient();
   useEffect(() => {
-    const channel = supabase
-      .channel(`rt-${table}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table },
-        () => {
-          qc.invalidateQueries({ queryKey });
-        },
-      )
-      .subscribe();
+    let cancelled = false;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      const uid = data.user?.id;
+      if (!uid || cancelled) return;
+
+      channel = supabase
+        .channel(`user:${uid}:rt-${table}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table, filter: `user_id=eq.${uid}` },
+          () => {
+            qc.invalidateQueries({ queryKey });
+          },
+        )
+        .subscribe();
+    })();
+
     return () => {
-      supabase.removeChannel(channel);
+      cancelled = true;
+      if (channel) supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [table]);
