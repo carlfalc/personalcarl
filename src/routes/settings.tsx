@@ -35,7 +35,7 @@ function SettingsPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("telegram_chat_id, briefing_enabled, briefing_time, nudge_enabled, nudge_time, weekly_review_enabled, weekly_review_day, weekly_review_time")
+        .select("telegram_chat_id, briefing_enabled, briefing_time, nudge_enabled, nudge_time, weekly_review_enabled, weekly_review_day, weekly_review_time, grocery_send_enabled, grocery_send_day, grocery_send_time")
         .eq("id", userId!)
         .maybeSingle();
       if (error) throw error;
