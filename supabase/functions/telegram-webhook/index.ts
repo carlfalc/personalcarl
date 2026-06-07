@@ -149,16 +149,132 @@ async function callClaude(system: string, user: string, maxTokens = 1500): Promi
   return (data.content?.[0]?.text ?? "").toString();
 }
 
-async function detectIntent(transcript: string): Promise<"query" | "capture" | "complete"> {
+type Intent = "query" | "capture" | "complete" | "grocery_add" | "grocery_query" | "grocery_check";
+
+async function detectIntent(transcript: string): Promise<Intent> {
   try {
     const raw = await callClaude(INTENT_PROMPT, transcript, 30);
     const parsed = JSON.parse(stripCodeFences(raw));
-    if (parsed.intent === "query") return "query";
-    if (parsed.intent === "complete") return "complete";
-    return "capture";
+    const allowed: Intent[] = ["query", "capture", "complete", "grocery_add", "grocery_query", "grocery_check"];
+    return allowed.includes(parsed.intent) ? parsed.intent : "capture";
   } catch (e) {
     console.error("detectIntent failed", e);
     return "capture";
+  }
+}
+
+const GROCERY_PARSE_PROMPT = `Extract grocery items from the user's message. Return ONLY JSON: { "items": [{ "item": string, "quantity": string|null }] }. Split combined messages into individual items (e.g. "milk, eggs and bread" → 3 items). Extract quantities like "2L milk" → { item: "milk", quantity: "2L" }, "a dozen eggs" → { item: "eggs", quantity: "a dozen" }, "bread" → { item: "bread", quantity: null }. Use canonical singular item names where natural.`;
+
+async function handleGroceryAdd(
+  supabase: ReturnType<typeof createClient>,
+  chatId: number,
+  message: string,
+  ownerId: string,
+): Promise<void> {
+  try {
+    const raw = await callClaude(GROCERY_PARSE_PROMPT, message, 400);
+    const parsed = JSON.parse(stripCodeFences(raw));
+    const items: Array<{ item: string; quantity: string | null }> = Array.isArray(parsed.items)
+      ? parsed.items.filter((x: any) => x && typeof x.item === "string" && x.item.trim())
+      : [];
+    if (items.length === 0) {
+      await sendTelegram(chatId, "Couldn't pick out any items — try again?");
+      return;
+    }
+    const rows = items.map((it) => ({
+      user_id: ownerId,
+      item: it.item.trim(),
+      quantity: it.quantity?.trim() || null,
+    }));
+    const { error } = await supabase.from("grocery_items").insert(rows);
+    if (error) {
+      console.error("grocery insert failed", error);
+      await sendTelegram(chatId, "⚠️ Couldn't add to the list.");
+      return;
+    }
+    const lines = items.map((it) => `🛒 Added ${it.quantity ? `${it.quantity} ${it.item}` : it.item}`).join("\n");
+    await sendTelegram(chatId, lines);
+  } catch (e) {
+    console.error("handleGroceryAdd failed", e);
+    await sendTelegram(chatId, "⚠️ Couldn't add to the list.");
+  }
+}
+
+async function handleGroceryQuery(
+  supabase: ReturnType<typeof createClient>,
+  chatId: number,
+  ownerId: string,
+): Promise<void> {
+  try {
+    const { data } = await supabase
+      .from("grocery_items")
+      .select("item, quantity")
+      .eq("user_id", ownerId)
+      .eq("checked", false)
+      .order("created_at", { ascending: true });
+    const list = (data ?? []) as Array<{ item: string; quantity: string | null }>;
+    if (list.length === 0) {
+      await sendTelegram(chatId, "🛒 Your grocery list is empty.");
+      return;
+    }
+    const lines = list.map((i) => `• ${i.quantity ? `${i.quantity} ${i.item}` : i.item}`).join("\n");
+    await sendTelegram(chatId, `🛒 Grocery list:\n${lines}`);
+  } catch (e) {
+    console.error("handleGroceryQuery failed", e);
+    await sendTelegram(chatId, "⚠️ Couldn't load the list.");
+  }
+}
+
+async function handleGroceryCheck(
+  supabase: ReturnType<typeof createClient>,
+  chatId: number,
+  message: string,
+  ownerId: string,
+): Promise<void> {
+  try {
+    const { data } = await supabase
+      .from("grocery_items")
+      .select("id, item, quantity")
+      .eq("user_id", ownerId)
+      .eq("checked", false)
+      .order("created_at", { ascending: true });
+    const open = (data ?? []) as Array<{ id: string; item: string; quantity: string | null }>;
+    if (open.length === 0) {
+      await sendTelegram(chatId, "Nothing on the grocery list to tick off.");
+      return;
+    }
+    const system = `Match the user's message against the open grocery list (loose meaning match — "milk" matches "2L milk", "eggs" matches "dozen eggs"). Return ONLY JSON: { "matched_ids": [uuid strings] }.`;
+    const userMsg = `Message: ${message}\n\nOpen items:\n${JSON.stringify(open.map((r) => ({ id: r.id, item: r.item, quantity: r.quantity })))}`;
+    const raw = await callClaude(system, userMsg, 400);
+    let matchedIds: string[] = [];
+    try {
+      const parsed = JSON.parse(stripCodeFences(raw));
+      const valid = new Set(open.map((r) => r.id));
+      if (Array.isArray(parsed.matched_ids)) {
+        matchedIds = parsed.matched_ids.filter((id: unknown) => typeof id === "string" && valid.has(id));
+      }
+    } catch (e) { console.error("grocery check parse", e); }
+
+    if (matchedIds.length === 0) {
+      const list = open.slice(0, 10).map((r) => `• ${r.quantity ? `${r.quantity} ${r.item}` : r.item}`).join("\n");
+      await sendTelegram(chatId, `Couldn't match that — open items:\n${list}`);
+      return;
+    }
+    const { error } = await supabase
+      .from("grocery_items")
+      .update({ checked: true, updated_at: new Date().toISOString() })
+      .in("id", matchedIds);
+    if (error) {
+      console.error("grocery check update", error);
+      await sendTelegram(chatId, "⚠️ Couldn't tick those off.");
+      return;
+    }
+    const checked = open.filter((r) => matchedIds.includes(r.id));
+    const lines = checked.map((r) => `✅ Got ${r.quantity ? `${r.quantity} ${r.item}` : r.item}`).join("\n");
+    await sendTelegram(chatId, lines);
+  } catch (e) {
+    console.error("handleGroceryCheck failed", e);
+    await sendTelegram(chatId, "⚠️ Couldn't tick those off.");
   }
 }
 
