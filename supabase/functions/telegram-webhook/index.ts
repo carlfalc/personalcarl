@@ -693,9 +693,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Otherwise classify as note
-    const parsed = await classifyNote(transcript);
-
     // Resolve owner (single-user app): pick the first profile.
     const { data: ownerProfile } = await supabase
       .from("profiles")
@@ -707,6 +704,20 @@ Deno.serve(async (req) => {
     if (!ownerId) {
       console.error("No owner profile found; cannot attribute new rows.");
     }
+
+    // Intent detection: is this a question about existing data, or new content?
+    if (ownerId) {
+      const intent = await detectIntent(transcript);
+      if (intent === "query") {
+        await handleQuery(supabase, chatId, transcript, ownerId);
+        return new Response(JSON.stringify({ ok: true, handled: "query" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    // Otherwise classify as note
+    const parsed = await classifyNote(transcript);
 
     // Fallback: if nothing was extracted and the user didn't mention any known
     // keyword (task / meeting / idea / to-do / etc.), save the raw message as a task.
