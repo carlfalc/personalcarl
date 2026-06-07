@@ -330,6 +330,7 @@ export type Database = {
           briefing_enabled: boolean
           briefing_time: string
           created_at: string
+          diary_summary_enabled: boolean
           display_name: string
           gmail_connection_id: string | null
           gmail_email: string | null
@@ -338,6 +339,7 @@ export type Database = {
           grocery_send_time: string
           id: string
           last_briefing_sent: string | null
+          last_diary_summary: string | null
           last_grocery_sent: string | null
           last_nudge_sent: string | null
           last_weekly_review_sent: string | null
@@ -353,6 +355,7 @@ export type Database = {
           briefing_enabled?: boolean
           briefing_time?: string
           created_at?: string
+          diary_summary_enabled?: boolean
           display_name?: string
           gmail_connection_id?: string | null
           gmail_email?: string | null
@@ -361,6 +364,7 @@ export type Database = {
           grocery_send_time?: string
           id: string
           last_briefing_sent?: string | null
+          last_diary_summary?: string | null
           last_grocery_sent?: string | null
           last_nudge_sent?: string | null
           last_weekly_review_sent?: string | null
@@ -376,6 +380,7 @@ export type Database = {
           briefing_enabled?: boolean
           briefing_time?: string
           created_at?: string
+          diary_summary_enabled?: boolean
           display_name?: string
           gmail_connection_id?: string | null
           gmail_email?: string | null
@@ -384,6 +389,7 @@ export type Database = {
           grocery_send_time?: string
           id?: string
           last_briefing_sent?: string | null
+          last_diary_summary?: string | null
           last_grocery_sent?: string | null
           last_nudge_sent?: string | null
           last_weekly_review_sent?: string | null
