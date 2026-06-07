@@ -182,6 +182,42 @@ function SettingsPage() {
           <p className="text-xs text-muted-foreground">
             Used by the assistant bot to send you replies and confirmations.
           </p>
+
+          <div className="border-t border-border/60 pt-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label htmlFor="briefing-toggle" className="text-sm font-semibold">Morning briefing</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Daily summary of meetings, tasks, birthdays & weather.
+                </p>
+              </div>
+              <input
+                id="briefing-toggle"
+                type="checkbox"
+                className="h-5 w-5 accent-primary"
+                checked={briefingEnabled}
+                onChange={(e) => setBriefingEnabled(e.target.checked)}
+              />
+            </div>
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <Label htmlFor="briefing-time">Send at</Label>
+                <Input
+                  id="briefing-time"
+                  type="time"
+                  value={briefingTime}
+                  onChange={(e) => setBriefingTime(e.target.value)}
+                  disabled={!briefingEnabled}
+                />
+              </div>
+              <Button
+                onClick={() => saveBriefing.mutate({ enabled: briefingEnabled, time: briefingTime })}
+                disabled={saveBriefing.isPending}
+              >
+                <Save className="h-4 w-4 mr-1" /> Save
+              </Button>
+            </div>
+          </div>
         </div>
       </Card>
 
