@@ -329,6 +329,69 @@ async function runEveningNudge(owner: OwnerProfile, now: ReturnType<typeof nowIn
   });
 }
 
+async function callClaudeWeeklyReview(userJson: string): Promise<string> {
+  const system = "Write Carl's weekly review for Telegram. Plain text, warm but efficient, no markdown headers. Sections: '🏁 Wins' (completed items, summarised), '⏳ Carried over' (open/overdue), '📓 Week in brief' (2-3 sentence synthesis of the diary entries — themes, not a list), '📅 Week ahead' (upcoming meetings), '🧠 Learned about you' (new memory facts, if any). Skip empty sections. End with one short reflective question for the week ahead.";
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-5",
+      max_tokens: 1200,
+      system,
+      messages: [{ role: "user", content: userJson }],
+    }),
+  });
+  if (!r.ok) throw new Error(`Anthropic weekly review ${r.status}: ${await r.text()}`);
+  const data = await r.json();
+  const blocks = Array.isArray(data?.content) ? data.content : [];
+  return blocks.filter((b: any) => b?.type === "text").map((b: any) => b.text).join("\n\n").trim();
+}
+
+async function runWeeklyReview(owner: OwnerProfile, now: ReturnType<typeof nowInAuckland>): Promise<void> {
+  if (!owner.weekly_review_enabled || !owner.telegram_chat_id || owner.weekly_review_day === null || !owner.weekly_review_time) return;
+  if (owner.weekly_review_day !== now.dow) return;
+  const todayYmd = now.ymd;
+  const lastYmd = owner.last_weekly_review_sent ? aklDateString(new Date(owner.last_weekly_review_sent)) : null;
+  if (lastYmd === todayYmd) return;
+  if (!isAtOrPastTime(owner.weekly_review_time, now)) return;
+
+  const weekAgoIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const weekAheadIso = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const nowIso = new Date().toISOString();
+
+  const [doneRes, openRes, diaryRes, pastMeetingsRes, futureMeetingsRes, memoryRes] = await Promise.all([
+    db(`entries?select=content,type,priority,due_date,updated_at&user_id=eq.${owner.id}&type=in.(task,todo)&status=eq.done&updated_at=gte.${weekAgoIso}&order=updated_at.desc`),
+    db(`entries?select=content,type,priority,due_date&user_id=eq.${owner.id}&type=in.(task,todo)&status=neq.done&due_date=lte.${todayYmd}&order=due_date.asc`),
+    db(`entries?select=content,created_at,tags&user_id=eq.${owner.id}&type=eq.diary&created_at=gte.${weekAgoIso}&order=created_at.asc`),
+    db(`meetings?select=title,datetime,location,notes&user_id=eq.${owner.id}&datetime=gte.${weekAgoIso}&datetime=lt.${nowIso}&order=datetime.asc`),
+    db(`meetings?select=title,datetime,location,notes&user_id=eq.${owner.id}&datetime=gte.${nowIso}&datetime=lte.${weekAheadIso}&order=datetime.asc`),
+    db(`memory?select=fact,category,created_at&user_id=eq.${owner.id}&created_at=gte.${weekAgoIso}&order=created_at.desc`),
+  ]);
+
+  const payload = {
+    date_nz: new Date().toLocaleDateString("en-NZ", { timeZone: TZ, weekday: "long", day: "numeric", month: "long" }),
+    completed: doneRes.ok ? await doneRes.json() : [],
+    open_or_overdue: openRes.ok ? await openRes.json() : [],
+    diary_entries: diaryRes.ok ? await diaryRes.json() : [],
+    past_meetings: pastMeetingsRes.ok ? await pastMeetingsRes.json() : [],
+    upcoming_meetings: futureMeetingsRes.ok ? await futureMeetingsRes.json() : [],
+    new_memory: memoryRes.ok ? await memoryRes.json() : [],
+  };
+
+  const text = await callClaudeWeeklyReview(JSON.stringify(payload));
+  if (text) await sendTelegram(owner.telegram_chat_id, text);
+
+  await db(`profiles?id=eq.${owner.id}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ last_weekly_review_sent: new Date().toISOString() }),
+  });
+}
+
 async function runBirthdayCheck(chatId: string, now: ReturnType<typeof nowInAuckland>): Promise<void> {
   // Run once per day, around 8am local. We use a marker row in a dedicated lightweight approach:
   // store the last birthday-check date in a schedules-like marker by abusing schedule's last_run? Simpler:
