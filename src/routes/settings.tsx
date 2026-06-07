@@ -35,7 +35,7 @@ function SettingsPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("telegram_chat_id")
+        .select("telegram_chat_id, briefing_enabled, briefing_time")
         .eq("id", userId!)
         .maybeSingle();
       if (error) throw error;
@@ -44,9 +44,13 @@ function SettingsPage() {
   });
 
   const [chatId, setChatId] = useState("6824076380");
+  const [briefingEnabled, setBriefingEnabled] = useState(true);
+  const [briefingTime, setBriefingTime] = useState("07:00");
   useEffect(() => {
     if (profile?.telegram_chat_id) setChatId(profile.telegram_chat_id);
-  }, [profile?.telegram_chat_id]);
+    if (typeof profile?.briefing_enabled === "boolean") setBriefingEnabled(profile.briefing_enabled);
+    if (profile?.briefing_time) setBriefingTime(String(profile.briefing_time).slice(0, 5));
+  }, [profile?.telegram_chat_id, profile?.briefing_enabled, profile?.briefing_time]);
 
   const saveChatId = useMutation({
     mutationFn: async () => {
@@ -60,6 +64,22 @@ function SettingsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["profile-settings"] });
       toast.success("Telegram chat ID saved");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
+  });
+
+  const saveBriefing = useMutation({
+    mutationFn: async (next: { enabled: boolean; time: string }) => {
+      if (!userId) throw new Error("Not signed in");
+      const { error } = await supabase
+        .from("profiles")
+        .update({ briefing_enabled: next.enabled, briefing_time: next.time + ":00" })
+        .eq("id", userId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["profile-settings"] });
+      toast.success("Morning briefing saved");
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
