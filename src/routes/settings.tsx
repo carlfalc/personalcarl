@@ -139,6 +139,26 @@ function SettingsPage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
 
+  const saveGrocery = useMutation({
+    mutationFn: async (next: { enabled: boolean; day: number | "every"; time: string }) => {
+      if (!userId) throw new Error("Not signed in");
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          grocery_send_enabled: next.enabled,
+          grocery_send_day: next.day === "every" ? null : next.day,
+          grocery_send_time: next.time + ":00",
+        } as any)
+        .eq("id", userId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["profile-settings"] });
+      toast.success("Grocery send saved");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
+  });
+
   // ---- Birthdays ----
   const { data: birthdays = [] } = useQuery({
     queryKey: ["birthdays", userId],
