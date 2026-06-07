@@ -178,10 +178,12 @@ type OwnerProfile = {
   grocery_send_day: number | null;
   grocery_send_time: string | null;
   last_grocery_sent: string | null;
+  diary_summary_enabled: boolean;
+  last_diary_summary: string | null;
 };
 
 async function getOwnerProfile(): Promise<OwnerProfile | null> {
-  const r = await db("profiles?select=id,telegram_chat_id,briefing_enabled,briefing_time,last_briefing_sent,nudge_enabled,nudge_time,last_nudge_sent,weekly_review_enabled,weekly_review_day,weekly_review_time,last_weekly_review_sent,grocery_send_enabled,grocery_send_day,grocery_send_time,last_grocery_sent&order=created_at.asc&limit=1");
+  const r = await db("profiles?select=id,telegram_chat_id,briefing_enabled,briefing_time,last_briefing_sent,nudge_enabled,nudge_time,last_nudge_sent,weekly_review_enabled,weekly_review_day,weekly_review_time,last_weekly_review_sent,grocery_send_enabled,grocery_send_day,grocery_send_time,last_grocery_sent,diary_summary_enabled,last_diary_summary&order=created_at.asc&limit=1");
   if (!r.ok) return null;
   const rows = await r.json();
   return rows?.[0] ?? null;
@@ -430,6 +432,72 @@ async function runGrocerySend(owner: OwnerProfile, now: ReturnType<typeof nowInA
   });
 }
 
+async function callClaudeDiarySummary(diaryJson: string): Promise<string> {
+  const system =
+    "You are summarising Carl's diary entries from today into one tidy, warm paragraph (3-5 sentences) that captures the shape of the day: themes, mood, key moments. Plain text, no bullet points, no markdown. Do not add a heading.";
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-5",
+      max_tokens: 500,
+      system,
+      messages: [{ role: "user", content: diaryJson }],
+    }),
+  });
+  if (!r.ok) throw new Error(`Anthropic diary-summary ${r.status}: ${await r.text()}`);
+  const data = await r.json();
+  const blocks = Array.isArray(data?.content) ? data.content : [];
+  return blocks.filter((b: any) => b?.type === "text").map((b: any) => b.text).join("\n\n").trim();
+}
+
+async function runDailySummary(owner: OwnerProfile, now: ReturnType<typeof nowInAuckland>): Promise<void> {
+  if (!owner.diary_summary_enabled) return;
+  const todayYmd = now.ymd;
+  const lastYmd = owner.last_diary_summary ? aklDateString(new Date(owner.last_diary_summary)) : null;
+  if (lastYmd === todayYmd) return;
+  // Due once per day at 21:30 NZ
+  if (!isAtOrPastTime("21:30", now)) return;
+
+  const dayStartUtc = new Date(`${todayYmd}T00:00:00+13:00`).toISOString();
+  const dayEndUtc = new Date(`${todayYmd}T23:59:59+13:00`).toISOString();
+
+  const r = await db(
+    `entries?select=content,created_at,tags&user_id=eq.${owner.id}&type=eq.diary&created_at=gte.${dayStartUtc}&created_at=lte.${dayEndUtc}&order=created_at.asc`,
+  );
+  if (!r.ok) return;
+  const rows = await r.json() as Array<{ content: string; created_at: string; tags: string[] | null }>;
+  // Exclude prior auto-summaries
+  const real = rows.filter((e) => !(e.tags ?? []).includes("daily-summary"));
+  if (real.length < 2) return;
+
+  const text = await callClaudeDiarySummary(JSON.stringify({ date: todayYmd, entries: real.map((e) => e.content) }));
+  if (!text) return;
+
+  await db("entries", {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      type: "diary",
+      content: `📝 Day summary: ${text}`,
+      tags: ["daily-summary"],
+      priority: 3,
+      status: "logged",
+      user_id: owner.id,
+    }),
+  });
+
+  await db(`profiles?id=eq.${owner.id}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ last_diary_summary: new Date().toISOString() }),
+  });
+}
+
 async function runBirthdayCheck(chatId: string, now: ReturnType<typeof nowInAuckland>): Promise<void> {
   // Run once per day, around 8am local. We use a marker row in a dedicated lightweight approach:
   // store the last birthday-check date in a schedules-like marker by abusing schedule's last_run? Simpler:
@@ -547,6 +615,12 @@ Deno.serve(async (req) => {
         await runGrocerySend(owner, now);
       } catch (e) {
         console.error("grocery send failed", e);
+      }
+
+      try {
+        await runDailySummary(owner, now);
+      } catch (e) {
+        console.error("daily diary summary failed", e);
       }
     }
 

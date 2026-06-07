@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Home } from "lucide-react";
 import { format } from "date-fns";
+import { GlobalSearch } from "@/components/GlobalSearch";
 
 export function TopBar() {
   const [now, setNow] = useState(new Date());
@@ -27,6 +28,9 @@ export function TopBar() {
           <span className="text-orange-accent">•</span>
           <span className="font-semibold text-white/90">{date}</span>
         </div>
+        <div className="hidden lg:block">
+          <GlobalSearch compact />
+        </div>
         <button className="flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-medium backdrop-blur transition hover:bg-white/10">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-accent/90">
             <Home className="h-4 w-4 text-white" />
@@ -37,3 +41,4 @@ export function TopBar() {
     </header>
   );
 }
+

@@ -963,23 +963,75 @@ Deno.serve(async (req) => {
       if (error) console.error("meetings insert error", error);
     }
     let familyFollowUp: { memory_id: string; name: string } | null = null;
-    for (const m of parsed.memory) {
-      if (!ownerId) break;
-      const { data: existing } = await supabase
-        .from("memory").select("id").eq("fact", m.fact).eq("user_id", ownerId).maybeSingle();
-      if (existing) {
-        await supabase.from("memory").update({
-          category: m.category, confidence: m.confidence ?? 0.8,
-          source: "telegram", updated_at: new Date().toISOString(),
-          contact_email: m.contact_email ?? null,
-          contact_phone: m.contact_phone ?? null,
-          relationship: m.relationship ?? null,
-          birth_date: m.birth_date ?? null,
-        }).eq("id", existing.id);
-        if (m.category === "family" && (!m.contact_email || !m.contact_phone || !m.relationship || !m.birth_date)) {
-          familyFollowUp = { memory_id: existing.id, name: m.fact };
+    if (parsed.memory.length && ownerId) {
+      // Smart dedup: ask Claude to classify each new fact vs existing memory.
+      const { data: existingFacts } = await supabase
+        .from("memory")
+        .select("id, fact")
+        .eq("user_id", ownerId)
+        .order("updated_at", { ascending: false })
+        .limit(500);
+      const existingList = (existingFacts ?? []) as Array<{ id: string; fact: string }>;
+
+      type DedupAction = "new" | "duplicate" | "update";
+      type DedupResult = { fact: string; action: DedupAction; existing_id: string | null; merged_fact: string | null };
+      const decisions = new Map<string, DedupResult>();
+
+      try {
+        const dedupSystem =
+          `You deduplicate personal memory facts. Compare each NEW fact to EXISTING facts (each has an id).\n` +
+          `Return ONLY JSON: { "results": [{ "fact": string, "action": "new"|"duplicate"|"update", "existing_id": uuid|null, "merged_fact": string|null }] }.\n` +
+          `- "duplicate" = same meaning as an existing fact (skip).\n` +
+          `- "update" = the new info refines/extends an existing fact; set existing_id and merged_fact = the combined fact.\n` +
+          `- "new" = no related existing fact.\n` +
+          `Return exactly one result per NEW fact, in the same order.`;
+        const userMsg = JSON.stringify({
+          new_facts: parsed.memory.map((m) => m.fact),
+          existing: existingList.map((e) => ({ id: e.id, fact: e.fact })),
+        });
+        const raw = await callClaude(dedupSystem, userMsg, 800);
+        const parsedDedup = JSON.parse(stripCodeFences(raw));
+        const results: DedupResult[] = Array.isArray(parsedDedup?.results) ? parsedDedup.results : [];
+        for (const r of results) {
+          if (r && typeof r.fact === "string") decisions.set(r.fact, r);
         }
-      } else {
+      } catch (e) {
+        console.error("memory dedup failed, falling back to insert-new", e);
+      }
+
+      for (const m of parsed.memory) {
+        const decision = decisions.get(m.fact);
+        const isFamilyIncomplete = m.category === "family" &&
+          (!m.contact_email || !m.contact_phone || !m.relationship || !m.birth_date);
+
+        if (decision?.action === "duplicate" && decision.existing_id) {
+          // Skip — but still allow family follow-up on the existing row
+          if (isFamilyIncomplete) {
+            familyFollowUp = { memory_id: decision.existing_id, name: m.fact };
+          }
+          continue;
+        }
+
+        if (decision?.action === "update" && decision.existing_id) {
+          const updates: Record<string, unknown> = {
+            category: m.category,
+            confidence: m.confidence ?? 0.8,
+            source: "telegram",
+            updated_at: new Date().toISOString(),
+          };
+          if (decision.merged_fact) updates.fact = decision.merged_fact;
+          if (m.contact_email) updates.contact_email = m.contact_email;
+          if (m.contact_phone) updates.contact_phone = m.contact_phone;
+          if (m.relationship) updates.relationship = m.relationship;
+          if (m.birth_date) updates.birth_date = m.birth_date;
+          await supabase.from("memory").update(updates).eq("id", decision.existing_id);
+          if (isFamilyIncomplete) {
+            familyFollowUp = { memory_id: decision.existing_id, name: decision.merged_fact ?? m.fact };
+          }
+          continue;
+        }
+
+        // "new" (or no decision / fallback) → insert
         const { data: inserted } = await supabase.from("memory").insert({
           fact: m.fact, category: m.category,
           confidence: m.confidence ?? 0.8, source: "telegram",
@@ -989,7 +1041,7 @@ Deno.serve(async (req) => {
           birth_date: m.birth_date ?? null,
           user_id: ownerId,
         }).select("id").maybeSingle();
-        if (m.category === "family" && inserted?.id && (!m.contact_email || !m.contact_phone || !m.relationship || !m.birth_date)) {
+        if (isFamilyIncomplete && inserted?.id) {
           familyFollowUp = { memory_id: inserted.id, name: m.fact };
         }
       }

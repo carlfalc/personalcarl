@@ -35,7 +35,7 @@ function SettingsPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("telegram_chat_id, briefing_enabled, briefing_time, nudge_enabled, nudge_time, weekly_review_enabled, weekly_review_day, weekly_review_time, grocery_send_enabled, grocery_send_day, grocery_send_time")
+        .select("telegram_chat_id, briefing_enabled, briefing_time, nudge_enabled, nudge_time, weekly_review_enabled, weekly_review_day, weekly_review_time, grocery_send_enabled, grocery_send_day, grocery_send_time, diary_summary_enabled")
         .eq("id", userId!)
         .maybeSingle();
       if (error) throw error;
@@ -54,6 +54,7 @@ function SettingsPage() {
   const [grocerySendEnabled, setGrocerySendEnabled] = useState(false);
   const [grocerySendDay, setGrocerySendDay] = useState<number | "every">("every");
   const [grocerySendTime, setGrocerySendTime] = useState("16:00");
+  const [diarySummaryEnabled, setDiarySummaryEnabled] = useState(true);
   useEffect(() => {
     const p = profile as any;
     if (p?.telegram_chat_id) setChatId(p.telegram_chat_id);
@@ -69,6 +70,7 @@ function SettingsPage() {
       // leave default
     } else if (typeof p?.grocery_send_day === "number") setGrocerySendDay(p.grocery_send_day);
     if (p?.grocery_send_time) setGrocerySendTime(String(p.grocery_send_time).slice(0, 5));
+    if (typeof p?.diary_summary_enabled === "boolean") setDiarySummaryEnabled(p.diary_summary_enabled);
   }, [profile]);
 
   const saveChatId = useMutation({
@@ -158,6 +160,23 @@ function SettingsPage() {
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
+
+  const saveDiarySummary = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      if (!userId) throw new Error("Not signed in");
+      const { error } = await supabase
+        .from("profiles")
+        .update({ diary_summary_enabled: enabled } as any)
+        .eq("id", userId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["profile-settings"] });
+      toast.success("Daily diary summary saved");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
+  });
+
 
   // ---- Birthdays ----
   const { data: birthdays = [] } = useQuery({
@@ -441,8 +460,32 @@ function SettingsPage() {
               </Button>
             </div>
           </div>
+
+          <div className="border-t border-border/60 pt-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label htmlFor="diary-summary-toggle" className="text-sm font-semibold">Daily diary summary</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Each night at 21:30 NZ, merges today's diary entries into one tidy paragraph (if 2+ entries).
+                </p>
+              </div>
+              <input
+                id="diary-summary-toggle"
+                type="checkbox"
+                className="h-5 w-5 accent-primary"
+                checked={diarySummaryEnabled}
+                onChange={(e) => {
+                  setDiarySummaryEnabled(e.target.checked);
+                  saveDiarySummary.mutate(e.target.checked);
+                }}
+              />
+            </div>
+          </div>
         </div>
       </Card>
+
+
+
 
 
 
