@@ -338,7 +338,8 @@ Deno.serve(async (req) => {
 
   try {
     const now = nowInAuckland();
-    const chatId = await getOwnerChatId();
+    const owner = await getOwnerProfile();
+    const chatId = owner?.telegram_chat_id ?? null;
 
     // Schedules
     const r = await db("schedules?select=*&enabled=eq.true");
