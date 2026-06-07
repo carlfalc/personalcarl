@@ -120,6 +120,18 @@ function TodayPage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
 
+  const updatePriority = useMutation({
+    mutationFn: async ({ id, priority }: { id: string; priority: number }) => {
+      const { error } = await supabase.from("entries")
+        .update({ priority }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["today-entries"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
+  });
+
   // ---- Meeting actions ----
   const cancelMeeting = useMutation({
     mutationFn: async (m: Meeting) => {
