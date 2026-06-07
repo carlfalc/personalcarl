@@ -70,6 +70,7 @@ function SettingsPage() {
       // leave default
     } else if (typeof p?.grocery_send_day === "number") setGrocerySendDay(p.grocery_send_day);
     if (p?.grocery_send_time) setGrocerySendTime(String(p.grocery_send_time).slice(0, 5));
+    if (typeof p?.diary_summary_enabled === "boolean") setDiarySummaryEnabled(p.diary_summary_enabled);
   }, [profile]);
 
   const saveChatId = useMutation({
