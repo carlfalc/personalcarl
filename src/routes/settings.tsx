@@ -239,8 +239,45 @@ function SettingsPage() {
               </Button>
             </div>
           </div>
+
+          <div className="border-t border-border/60 pt-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label htmlFor="nudge-toggle" className="text-sm font-semibold">Evening nudge</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Reminds you of tasks still open or overdue today.
+                </p>
+              </div>
+              <input
+                id="nudge-toggle"
+                type="checkbox"
+                className="h-5 w-5 accent-primary"
+                checked={nudgeEnabled}
+                onChange={(e) => setNudgeEnabled(e.target.checked)}
+              />
+            </div>
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <Label htmlFor="nudge-time">Send at</Label>
+                <Input
+                  id="nudge-time"
+                  type="time"
+                  value={nudgeTime}
+                  onChange={(e) => setNudgeTime(e.target.value)}
+                  disabled={!nudgeEnabled}
+                />
+              </div>
+              <Button
+                onClick={() => saveNudge.mutate({ enabled: nudgeEnabled, time: nudgeTime })}
+                disabled={saveNudge.isPending}
+              >
+                <Save className="h-4 w-4 mr-1" /> Save
+              </Button>
+            </div>
+          </div>
         </div>
       </Card>
+
 
       <Card className="rounded-3xl border-border/60 bg-card p-5 shadow-sm">
         <div className="mb-4 flex items-center gap-2">
