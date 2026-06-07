@@ -80,9 +80,10 @@ const COMPOSE_PROMPT = `You write a short professional email on behalf of the se
 
 const FAMILY_PROFILE_PROMPT = `Extract family contact/profile details from the user's reply. Return ONLY valid JSON: { "contact_email": string|null, "contact_phone": string|null, "relationship": string|null, "birth_date": string|null, "has_no_more_details": boolean }. Use YYYY-MM-DD for birth_date when possible. If they say they don't have the details, set has_no_more_details true.`;
 
-const INTENT_PROMPT = `Classify this Telegram message as either a QUESTION about the user's existing data, or new CONTENT to save. Return ONLY JSON: { "intent": "query" | "capture" }.
-- "query": asking about tasks, meetings, ideas, memory, birthdays, schedule, what they know, what's due, when something is, etc. Examples: "what's on today?", "when is my meeting with Sandesh?", "what ideas have I saved?", "when is Freya's birthday?", "do I have anything overdue?", "what do you know about me?".
-- "capture": dictating new tasks, ideas, diary entries, meetings, memory, family, or email requests. Examples: "add a task to call John", "remind me to buy milk", "email kitchen", "I had a good day".`;
+const INTENT_PROMPT = `Classify this Telegram message. Return ONLY JSON: { "intent": "query" | "capture" | "complete" }.
+- "query": asking about existing data (tasks, meetings, ideas, memory, birthdays, schedule). Examples: "what's on today?", "when is my meeting with Sandesh?", "do I have anything overdue?".
+- "complete": marking an existing task/todo as done. Examples: "done with the plumber one", "mark the FENZ email task as done", "finished the roster", "tick off buying milk", "I did the dishes".
+- "capture": dictating new content to save (tasks, ideas, diary, meetings, memory, family, email requests). Examples: "add a task to call John", "remind me to buy milk", "email kitchen", "I had a good day".`;
 
 // ---------- Telegram helpers ----------
 async function sendTelegram(chatId: number, text: string): Promise<void> {
@@ -145,14 +146,77 @@ async function callClaude(system: string, user: string, maxTokens = 1500): Promi
   return (data.content?.[0]?.text ?? "").toString();
 }
 
-async function detectIntent(transcript: string): Promise<"query" | "capture"> {
+async function detectIntent(transcript: string): Promise<"query" | "capture" | "complete"> {
   try {
     const raw = await callClaude(INTENT_PROMPT, transcript, 30);
     const parsed = JSON.parse(stripCodeFences(raw));
-    return parsed.intent === "query" ? "query" : "capture";
+    if (parsed.intent === "query") return "query";
+    if (parsed.intent === "complete") return "complete";
+    return "capture";
   } catch (e) {
     console.error("detectIntent failed", e);
     return "capture";
+  }
+}
+
+async function handleComplete(
+  supabase: ReturnType<typeof createClient>,
+  chatId: number,
+  message: string,
+  ownerId: string,
+): Promise<void> {
+  try {
+    const { data: openRows } = await supabase
+      .from("entries")
+      .select("id, content, type, due_date, priority")
+      .eq("user_id", ownerId)
+      .in("type", ["task", "todo"])
+      .neq("status", "done")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    const open = (openRows ?? []) as Array<{ id: string; content: string; type: string; due_date: string | null; priority: number | null }>;
+
+    if (open.length === 0) {
+      await sendTelegram(chatId, "You don't have any open tasks to complete.");
+      return;
+    }
+
+    const system = `You match a user's spoken/typed completion message against a list of their open tasks. Match LOOSELY on meaning, not exact wording. Return ONLY JSON: { "matched_ids": [uuid strings], "unmatched": string|null }. matched_ids may be empty if nothing clearly matches. unmatched is a short reason when nothing matches, otherwise null.`;
+    const userMsg = `Message: ${message}\n\nOpen tasks:\n${JSON.stringify(open.map((r) => ({ id: r.id, content: r.content })))}`;
+    const raw = await callClaude(system, userMsg, 400);
+    let matchedIds: string[] = [];
+    try {
+      const parsed = JSON.parse(stripCodeFences(raw));
+      if (Array.isArray(parsed.matched_ids)) {
+        const valid = new Set(open.map((r) => r.id));
+        matchedIds = parsed.matched_ids.filter((id: unknown) => typeof id === "string" && valid.has(id));
+      }
+    } catch (e) {
+      console.error("handleComplete parse error", e);
+    }
+
+    if (matchedIds.length === 0) {
+      const list = open.slice(0, 10).map((r, i) => `${i + 1}. ${r.content}`).join("\n");
+      await sendTelegram(chatId, `Couldn't find that task — current open tasks are:\n${list}`);
+      return;
+    }
+
+    const { error } = await supabase
+      .from("entries")
+      .update({ status: "done", updated_at: new Date().toISOString() })
+      .in("id", matchedIds);
+    if (error) {
+      console.error("complete update error", error);
+      await sendTelegram(chatId, "⚠️ Couldn't update those tasks, try again.");
+      return;
+    }
+
+    const completed = open.filter((r) => matchedIds.includes(r.id));
+    const lines = completed.map((r) => `✅ Done: ${r.content}`).join("\n");
+    await sendTelegram(chatId, lines);
+  } catch (e) {
+    console.error("handleComplete failed", e);
+    await sendTelegram(chatId, "⚠️ Couldn't complete that, try again.");
   }
 }
 
@@ -705,12 +769,18 @@ Deno.serve(async (req) => {
       console.error("No owner profile found; cannot attribute new rows.");
     }
 
-    // Intent detection: is this a question about existing data, or new content?
+    // Intent detection: question, completion, or new content?
     if (ownerId) {
       const intent = await detectIntent(transcript);
       if (intent === "query") {
         await handleQuery(supabase, chatId, transcript, ownerId);
         return new Response(JSON.stringify({ ok: true, handled: "query" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (intent === "complete") {
+        await handleComplete(supabase, chatId, transcript, ownerId);
+        return new Response(JSON.stringify({ ok: true, handled: "complete" }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }

@@ -305,6 +305,9 @@ export type Database = {
           gmail_email: string | null
           id: string
           last_briefing_sent: string | null
+          last_nudge_sent: string | null
+          nudge_enabled: boolean
+          nudge_time: string
           telegram_chat_id: string | null
           updated_at: string
         }
@@ -317,6 +320,9 @@ export type Database = {
           gmail_email?: string | null
           id: string
           last_briefing_sent?: string | null
+          last_nudge_sent?: string | null
+          nudge_enabled?: boolean
+          nudge_time?: string
           telegram_chat_id?: string | null
           updated_at?: string
         }
@@ -329,6 +335,9 @@ export type Database = {
           gmail_email?: string | null
           id?: string
           last_briefing_sent?: string | null
+          last_nudge_sent?: string | null
+          nudge_enabled?: boolean
+          nudge_time?: string
           telegram_chat_id?: string | null
           updated_at?: string
         }
