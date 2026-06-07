@@ -111,6 +111,26 @@ function SettingsPage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
 
+  const saveReview = useMutation({
+    mutationFn: async (next: { enabled: boolean; day: number; time: string }) => {
+      if (!userId) throw new Error("Not signed in");
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          weekly_review_enabled: next.enabled,
+          weekly_review_day: next.day,
+          weekly_review_time: next.time + ":00",
+        } as any)
+        .eq("id", userId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["profile-settings"] });
+      toast.success("Weekly review saved");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
+  });
+
   // ---- Birthdays ----
   const { data: birthdays = [] } = useQuery({
     queryKey: ["birthdays", userId],
