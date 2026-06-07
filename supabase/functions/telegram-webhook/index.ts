@@ -80,9 +80,10 @@ const COMPOSE_PROMPT = `You write a short professional email on behalf of the se
 
 const FAMILY_PROFILE_PROMPT = `Extract family contact/profile details from the user's reply. Return ONLY valid JSON: { "contact_email": string|null, "contact_phone": string|null, "relationship": string|null, "birth_date": string|null, "has_no_more_details": boolean }. Use YYYY-MM-DD for birth_date when possible. If they say they don't have the details, set has_no_more_details true.`;
 
-const INTENT_PROMPT = `Classify this Telegram message as either a QUESTION about the user's existing data, or new CONTENT to save. Return ONLY JSON: { "intent": "query" | "capture" }.
-- "query": asking about tasks, meetings, ideas, memory, birthdays, schedule, what they know, what's due, when something is, etc. Examples: "what's on today?", "when is my meeting with Sandesh?", "what ideas have I saved?", "when is Freya's birthday?", "do I have anything overdue?", "what do you know about me?".
-- "capture": dictating new tasks, ideas, diary entries, meetings, memory, family, or email requests. Examples: "add a task to call John", "remind me to buy milk", "email kitchen", "I had a good day".`;
+const INTENT_PROMPT = `Classify this Telegram message. Return ONLY JSON: { "intent": "query" | "capture" | "complete" }.
+- "query": asking about existing data (tasks, meetings, ideas, memory, birthdays, schedule). Examples: "what's on today?", "when is my meeting with Sandesh?", "do I have anything overdue?".
+- "complete": marking an existing task/todo as done. Examples: "done with the plumber one", "mark the FENZ email task as done", "finished the roster", "tick off buying milk", "I did the dishes".
+- "capture": dictating new content to save (tasks, ideas, diary, meetings, memory, family, email requests). Examples: "add a task to call John", "remind me to buy milk", "email kitchen", "I had a good day".`;
 
 // ---------- Telegram helpers ----------
 async function sendTelegram(chatId: number, text: string): Promise<void> {
