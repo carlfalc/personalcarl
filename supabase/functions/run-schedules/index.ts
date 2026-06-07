@@ -497,6 +497,8 @@ async function runDailySummary(owner: OwnerProfile, now: ReturnType<typeof nowIn
     body: JSON.stringify({ last_diary_summary: new Date().toISOString() }),
   });
 }
+
+async function runBirthdayCheck(chatId: string, now: ReturnType<typeof nowInAuckland>): Promise<void> {
   // Run once per day, around 8am local. We use a marker row in a dedicated lightweight approach:
   // store the last birthday-check date in a schedules-like marker by abusing schedule's last_run? Simpler:
   // just use the most recent birthday-check log via entries table is overkill — track in memory of cron.
