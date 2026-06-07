@@ -35,7 +35,7 @@ function SettingsPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("telegram_chat_id, briefing_enabled, briefing_time, nudge_enabled, nudge_time, weekly_review_enabled, weekly_review_day, weekly_review_time")
+        .select("telegram_chat_id, briefing_enabled, briefing_time, nudge_enabled, nudge_time, weekly_review_enabled, weekly_review_day, weekly_review_time, grocery_send_enabled, grocery_send_day, grocery_send_time")
         .eq("id", userId!)
         .maybeSingle();
       if (error) throw error;
@@ -51,6 +51,9 @@ function SettingsPage() {
   const [reviewEnabled, setReviewEnabled] = useState(true);
   const [reviewDay, setReviewDay] = useState(0);
   const [reviewTime, setReviewTime] = useState("19:00");
+  const [grocerySendEnabled, setGrocerySendEnabled] = useState(false);
+  const [grocerySendDay, setGrocerySendDay] = useState<number | "every">("every");
+  const [grocerySendTime, setGrocerySendTime] = useState("16:00");
   useEffect(() => {
     const p = profile as any;
     if (p?.telegram_chat_id) setChatId(p.telegram_chat_id);
@@ -61,6 +64,11 @@ function SettingsPage() {
     if (typeof p?.weekly_review_enabled === "boolean") setReviewEnabled(p.weekly_review_enabled);
     if (typeof p?.weekly_review_day === "number") setReviewDay(p.weekly_review_day);
     if (p?.weekly_review_time) setReviewTime(String(p.weekly_review_time).slice(0, 5));
+    if (typeof p?.grocery_send_enabled === "boolean") setGrocerySendEnabled(p.grocery_send_enabled);
+    if (p?.grocery_send_day === null || typeof p?.grocery_send_day === "undefined") {
+      // leave default
+    } else if (typeof p?.grocery_send_day === "number") setGrocerySendDay(p.grocery_send_day);
+    if (p?.grocery_send_time) setGrocerySendTime(String(p.grocery_send_time).slice(0, 5));
   }, [profile]);
 
   const saveChatId = useMutation({
@@ -127,6 +135,26 @@ function SettingsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["profile-settings"] });
       toast.success("Weekly review saved");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
+  });
+
+  const saveGrocery = useMutation({
+    mutationFn: async (next: { enabled: boolean; day: number | "every"; time: string }) => {
+      if (!userId) throw new Error("Not signed in");
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          grocery_send_enabled: next.enabled,
+          grocery_send_day: next.day === "every" ? null : next.day,
+          grocery_send_time: next.time + ":00",
+        } as any)
+        .eq("id", userId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["profile-settings"] });
+      toast.success("Grocery send saved");
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
@@ -355,8 +383,67 @@ function SettingsPage() {
               </Button>
             </div>
           </div>
+
+          <div className="border-t border-border/60 pt-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label htmlFor="grocery-toggle" className="text-sm font-semibold">Grocery list</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Sends your current shopping list to Telegram.
+                </p>
+              </div>
+              <input
+                id="grocery-toggle"
+                type="checkbox"
+                className="h-5 w-5 accent-primary"
+                checked={grocerySendEnabled}
+                onChange={(e) => setGrocerySendEnabled(e.target.checked)}
+              />
+            </div>
+            <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] items-end">
+              <div>
+                <Label htmlFor="grocery-day">Day</Label>
+                <select
+                  id="grocery-day"
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={String(grocerySendDay)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setGrocerySendDay(v === "every" ? "every" : parseInt(v, 10));
+                  }}
+                  disabled={!grocerySendEnabled}
+                >
+                  <option value="every">Every day</option>
+                  <option value="0">Sunday</option>
+                  <option value="1">Monday</option>
+                  <option value="2">Tuesday</option>
+                  <option value="3">Wednesday</option>
+                  <option value="4">Thursday</option>
+                  <option value="5">Friday</option>
+                  <option value="6">Saturday</option>
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="grocery-time">Send at</Label>
+                <Input
+                  id="grocery-time"
+                  type="time"
+                  value={grocerySendTime}
+                  onChange={(e) => setGrocerySendTime(e.target.value)}
+                  disabled={!grocerySendEnabled}
+                />
+              </div>
+              <Button
+                onClick={() => saveGrocery.mutate({ enabled: grocerySendEnabled, day: grocerySendDay, time: grocerySendTime })}
+                disabled={saveGrocery.isPending}
+              >
+                <Save className="h-4 w-4 mr-1" /> Save
+              </Button>
+            </div>
+          </div>
         </div>
       </Card>
+
 
 
 

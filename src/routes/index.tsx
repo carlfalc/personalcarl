@@ -13,8 +13,9 @@ import { cancelCalendarEvent, rescheduleCalendarEvent } from "@/lib/meetings.fun
 import { BirthdayBanner } from "@/components/BirthdayBanner";
 import {
   GripVertical, Cloud, CloudRain, Sun, Check, X, CalendarClock, Lightbulb,
-  Plus, MessageSquarePlus, Mail,
+  Plus, MessageSquarePlus, Mail, ShoppingCart, Trash2,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -422,9 +423,10 @@ function TodayPage() {
         )}
       </Panel>
     ),
+    grocery: <GroceryPanel />,
   };
 
-  const DEFAULT_ORDER = ["tasks", "weather", "meetings", "ideas", "diary"];
+  const DEFAULT_ORDER = ["tasks", "weather", "meetings", "grocery", "ideas", "diary"];
   const [order, setOrder] = useState<string[]>(DEFAULT_ORDER);
 
   useEffect(() => {
@@ -547,4 +549,158 @@ function Panel({
 
 function Empty({ children }: { children: React.ReactNode }) {
   return <p className="py-4 text-sm text-muted-foreground">{children}</p>;
+}
+
+type GroceryItem = {
+  id: string;
+  item: string;
+  quantity: string | null;
+  checked: boolean;
+  created_at: string;
+};
+
+function GroceryPanel() {
+  useRealtimeTable("grocery_items", ["grocery-items"]);
+  const qc = useQueryClient();
+  const [newItem, setNewItem] = useState("");
+  const [recentlyChecked, setRecentlyChecked] = useState<Record<string, number>>({});
+
+  const { data: items = [] } = useQuery({
+    queryKey: ["grocery-items"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("grocery_items")
+        .select("*")
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return data as GroceryItem[];
+    },
+  });
+
+  const addItem = useMutation({
+    mutationFn: async (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+      // Split quantity prefix like "2L milk" or "2 milk"
+      const m = trimmed.match(/^([\d.,]+\s?[a-zA-Z]*)\s+(.+)$/);
+      const quantity = m ? m[1].trim() : null;
+      const item = m ? m[2].trim() : trimmed;
+      const { error } = await supabase.from("grocery_items").insert({ item, quantity });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setNewItem("");
+      qc.invalidateQueries({ queryKey: ["grocery-items"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
+  });
+
+  const toggleItem = useMutation({
+    mutationFn: async (it: GroceryItem) => {
+      const { error } = await supabase
+        .from("grocery_items")
+        .update({ checked: !it.checked })
+        .eq("id", it.id);
+      if (error) throw error;
+    },
+    onMutate: (it) => {
+      if (!it.checked) {
+        setRecentlyChecked((p) => ({ ...p, [it.id]: Date.now() }));
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["grocery-items"] }),
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
+  });
+
+  const clearChecked = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("grocery_items").delete().eq("checked", true);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["grocery-items"] });
+      toast.success("Cleared checked items");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
+  });
+
+  // Hide checked items after ~2s
+  useEffect(() => {
+    if (Object.keys(recentlyChecked).length === 0) return;
+    const t = setInterval(() => {
+      setRecentlyChecked((prev) => {
+        const cutoff = Date.now() - 2000;
+        const next: Record<string, number> = {};
+        for (const [id, ts] of Object.entries(prev)) if (ts > cutoff) next[id] = ts;
+        return next;
+      });
+    }, 500);
+    return () => clearInterval(t);
+  }, [recentlyChecked]);
+
+  const visible = items.filter((i) => !i.checked || recentlyChecked[i.id]);
+  const hasChecked = items.some((i) => i.checked);
+
+  return (
+    <Card className="rounded-3xl border-border/60 bg-card p-5 shadow-sm">
+      <div className="mb-4 flex items-center justify-between pr-10">
+        <div className="flex items-center gap-2">
+          <ShoppingCart className="h-5 w-5 text-orange-accent" />
+          <h3 className="text-base font-bold">Grocery</h3>
+        </div>
+        {hasChecked && (
+          <button
+            type="button"
+            onClick={() => clearChecked.mutate()}
+            className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-red-600"
+          >
+            <Trash2 className="h-3.5 w-3.5" /> Clear checked
+          </button>
+        )}
+      </div>
+
+      <form
+        onSubmit={(e) => { e.preventDefault(); addItem.mutate(newItem); }}
+        className="mb-3 flex gap-2"
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        <Input
+          value={newItem}
+          onChange={(e) => setNewItem(e.target.value)}
+          placeholder="Add item (e.g. 2L milk)"
+          className="h-9"
+        />
+        <Button type="submit" size="sm" disabled={!newItem.trim() || addItem.isPending}>
+          <Plus className="h-4 w-4" />
+        </Button>
+      </form>
+
+      {visible.length === 0 ? (
+        <Empty>List is empty.</Empty>
+      ) : (
+        <ul className="divide-y divide-border/60">
+          {visible.map((i) => (
+            <li
+              key={i.id}
+              className="flex items-center gap-3 py-2 text-sm"
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <input
+                type="checkbox"
+                checked={i.checked}
+                onChange={() => toggleItem.mutate(i)}
+                className="h-4 w-4 accent-primary"
+              />
+              <span className={`flex-1 ${i.checked ? "line-through text-muted-foreground" : ""}`}>
+                {i.item}
+                {i.quantity && (
+                  <span className="ml-2 text-xs text-muted-foreground">({i.quantity})</span>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
 }
