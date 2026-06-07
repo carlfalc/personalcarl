@@ -64,6 +64,11 @@ function SettingsPage() {
     if (typeof p?.weekly_review_enabled === "boolean") setReviewEnabled(p.weekly_review_enabled);
     if (typeof p?.weekly_review_day === "number") setReviewDay(p.weekly_review_day);
     if (p?.weekly_review_time) setReviewTime(String(p.weekly_review_time).slice(0, 5));
+    if (typeof p?.grocery_send_enabled === "boolean") setGrocerySendEnabled(p.grocery_send_enabled);
+    if (p?.grocery_send_day === null || typeof p?.grocery_send_day === "undefined") {
+      // leave default
+    } else if (typeof p?.grocery_send_day === "number") setGrocerySendDay(p.grocery_send_day);
+    if (p?.grocery_send_time) setGrocerySendTime(String(p.grocery_send_time).slice(0, 5));
   }, [profile]);
 
   const saveChatId = useMutation({
