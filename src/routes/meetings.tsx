@@ -507,9 +507,11 @@ function DocumentsBlock({
     if (!files || files.length === 0) return;
     setUploading(true);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not signed in");
       for (const file of Array.from(files)) {
         const safeName = file.name.replace(/[^\w.\-]+/g, "_");
-        const path = `${meetingId}/${Date.now()}-${safeName}`;
+        const path = `${user.id}/${meetingId}/${Date.now()}-${safeName}`;
         const { error: upErr } = await supabase.storage
           .from("meeting-documents")
           .upload(path, file, { contentType: file.type || undefined });
