@@ -15,6 +15,9 @@ import {
   GripVertical, Cloud, CloudRain, Sun, Check, X, CalendarClock, Lightbulb,
   Plus, MessageSquarePlus, Mail,
 } from "lucide-react";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { addDays, format } from "date-fns";
 import {
   DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors,
@@ -113,6 +116,18 @@ function TodayPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["today-entries"] });
       toast.success("Task removed");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
+  });
+
+  const updatePriority = useMutation({
+    mutationFn: async ({ id, priority }: { id: string; priority: number }) => {
+      const { error } = await supabase.from("entries")
+        .update({ priority }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["today-entries"] });
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
@@ -250,7 +265,23 @@ function TodayPage() {
             {todaysTasks.map((t) => (
               <div key={t.id} className="flex items-center gap-3 py-3 text-sm">
                 <span className="flex-1 truncate">{t.content}</span>
-                <Badge variant="outline" className="text-[10px]">P{t.priority ?? 3}</Badge>
+                <div onPointerDown={(e) => e.stopPropagation()}>
+                  <Select
+                    value={String(t.priority ?? 3)}
+                    onValueChange={(v) => updatePriority.mutate({ id: t.id, priority: parseInt(v) })}
+                  >
+                    <SelectTrigger className="h-6 w-[58px] px-2 py-0 text-[10px] font-semibold">
+                      <SelectValue>P{t.priority ?? 3}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">P1 — Highest</SelectItem>
+                      <SelectItem value="2">P2 — High</SelectItem>
+                      <SelectItem value="3">P3 — Medium</SelectItem>
+                      <SelectItem value="4">P4 — Low</SelectItem>
+                      <SelectItem value="5">P5 — Lowest</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="flex items-center gap-1" onPointerDown={(e) => e.stopPropagation()}>
                   <Button
                     size="icon" variant="ghost"

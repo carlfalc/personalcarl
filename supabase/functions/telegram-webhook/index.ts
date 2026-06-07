@@ -627,6 +627,24 @@ Deno.serve(async (req) => {
     // Otherwise classify as note
     const parsed = await classifyNote(transcript);
 
+    // Fallback: if nothing was extracted and the user didn't mention any known
+    // keyword (task / meeting / idea / to-do / etc.), save the raw message as a task.
+    const nothingExtracted =
+      parsed.entries.length === 0 &&
+      parsed.meetings.length === 0 &&
+      parsed.memory.length === 0 &&
+      parsed.email_intents.length === 0;
+    const hasKnownKeyword = /\b(task|todo|to[-\s]?do|meeting|appointment|idea|diary|family|birthday|business|technology|travel|email)\b/i.test(transcript);
+    if (nothingExtracted && !hasKnownKeyword && transcript.trim().length > 0) {
+      parsed.entries.push({
+        type: "task",
+        content: transcript.trim(),
+        tags: ["telegram"],
+        priority: 3,
+        due_date: null,
+      });
+    }
+
     if (parsed.entries.length) {
       const rows = parsed.entries.map((e) => ({
         type: e.type, content: e.content, tags: e.tags ?? [],
