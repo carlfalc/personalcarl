@@ -306,10 +306,14 @@ export type Database = {
           id: string
           last_briefing_sent: string | null
           last_nudge_sent: string | null
+          last_weekly_review_sent: string | null
           nudge_enabled: boolean
           nudge_time: string
           telegram_chat_id: string | null
           updated_at: string
+          weekly_review_day: number
+          weekly_review_enabled: boolean
+          weekly_review_time: string
         }
         Insert: {
           briefing_enabled?: boolean
@@ -321,10 +325,14 @@ export type Database = {
           id: string
           last_briefing_sent?: string | null
           last_nudge_sent?: string | null
+          last_weekly_review_sent?: string | null
           nudge_enabled?: boolean
           nudge_time?: string
           telegram_chat_id?: string | null
           updated_at?: string
+          weekly_review_day?: number
+          weekly_review_enabled?: boolean
+          weekly_review_time?: string
         }
         Update: {
           briefing_enabled?: boolean
@@ -336,10 +344,14 @@ export type Database = {
           id?: string
           last_briefing_sent?: string | null
           last_nudge_sent?: string | null
+          last_weekly_review_sent?: string | null
           nudge_enabled?: boolean
           nudge_time?: string
           telegram_chat_id?: string | null
           updated_at?: string
+          weekly_review_day?: number
+          weekly_review_enabled?: boolean
+          weekly_review_time?: string
         }
         Relationships: []
       }

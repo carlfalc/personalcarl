@@ -35,7 +35,7 @@ function SettingsPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("telegram_chat_id, briefing_enabled, briefing_time, nudge_enabled, nudge_time")
+        .select("telegram_chat_id, briefing_enabled, briefing_time, nudge_enabled, nudge_time, weekly_review_enabled, weekly_review_day, weekly_review_time")
         .eq("id", userId!)
         .maybeSingle();
       if (error) throw error;
@@ -48,6 +48,9 @@ function SettingsPage() {
   const [briefingTime, setBriefingTime] = useState("07:00");
   const [nudgeEnabled, setNudgeEnabled] = useState(true);
   const [nudgeTime, setNudgeTime] = useState("18:00");
+  const [reviewEnabled, setReviewEnabled] = useState(true);
+  const [reviewDay, setReviewDay] = useState(0);
+  const [reviewTime, setReviewTime] = useState("19:00");
   useEffect(() => {
     const p = profile as any;
     if (p?.telegram_chat_id) setChatId(p.telegram_chat_id);
@@ -55,6 +58,9 @@ function SettingsPage() {
     if (p?.briefing_time) setBriefingTime(String(p.briefing_time).slice(0, 5));
     if (typeof p?.nudge_enabled === "boolean") setNudgeEnabled(p.nudge_enabled);
     if (p?.nudge_time) setNudgeTime(String(p.nudge_time).slice(0, 5));
+    if (typeof p?.weekly_review_enabled === "boolean") setReviewEnabled(p.weekly_review_enabled);
+    if (typeof p?.weekly_review_day === "number") setReviewDay(p.weekly_review_day);
+    if (p?.weekly_review_time) setReviewTime(String(p.weekly_review_time).slice(0, 5));
   }, [profile]);
 
   const saveChatId = useMutation({
@@ -101,6 +107,26 @@ function SettingsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["profile-settings"] });
       toast.success("Evening nudge saved");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
+  });
+
+  const saveReview = useMutation({
+    mutationFn: async (next: { enabled: boolean; day: number; time: string }) => {
+      if (!userId) throw new Error("Not signed in");
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          weekly_review_enabled: next.enabled,
+          weekly_review_day: next.day,
+          weekly_review_time: next.time + ":00",
+        } as any)
+        .eq("id", userId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["profile-settings"] });
+      toast.success("Weekly review saved");
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
@@ -275,8 +301,63 @@ function SettingsPage() {
               </Button>
             </div>
           </div>
+
+          <div className="border-t border-border/60 pt-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label htmlFor="review-toggle" className="text-sm font-semibold">Weekly review</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Wins, carried-over tasks, week in brief, and the week ahead.
+                </p>
+              </div>
+              <input
+                id="review-toggle"
+                type="checkbox"
+                className="h-5 w-5 accent-primary"
+                checked={reviewEnabled}
+                onChange={(e) => setReviewEnabled(e.target.checked)}
+              />
+            </div>
+            <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] items-end">
+              <div>
+                <Label htmlFor="review-day">Day</Label>
+                <select
+                  id="review-day"
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={reviewDay}
+                  onChange={(e) => setReviewDay(parseInt(e.target.value, 10))}
+                  disabled={!reviewEnabled}
+                >
+                  <option value={0}>Sunday</option>
+                  <option value={1}>Monday</option>
+                  <option value={2}>Tuesday</option>
+                  <option value={3}>Wednesday</option>
+                  <option value={4}>Thursday</option>
+                  <option value={5}>Friday</option>
+                  <option value={6}>Saturday</option>
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="review-time">Send at</Label>
+                <Input
+                  id="review-time"
+                  type="time"
+                  value={reviewTime}
+                  onChange={(e) => setReviewTime(e.target.value)}
+                  disabled={!reviewEnabled}
+                />
+              </div>
+              <Button
+                onClick={() => saveReview.mutate({ enabled: reviewEnabled, day: reviewDay, time: reviewTime })}
+                disabled={saveReview.isPending}
+              >
+                <Save className="h-4 w-4 mr-1" /> Save
+              </Button>
+            </div>
+          </div>
         </div>
       </Card>
+
 
 
       <Card className="rounded-3xl border-border/60 bg-card p-5 shadow-sm">
