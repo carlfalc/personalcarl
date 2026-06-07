@@ -903,6 +903,24 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+      if (intent === "grocery_add") {
+        await handleGroceryAdd(supabase, chatId, transcript, ownerId);
+        return new Response(JSON.stringify({ ok: true, handled: "grocery_add" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (intent === "grocery_query") {
+        await handleGroceryQuery(supabase, chatId, ownerId);
+        return new Response(JSON.stringify({ ok: true, handled: "grocery_query" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (intent === "grocery_check") {
+        await handleGroceryCheck(supabase, chatId, transcript, ownerId);
+        return new Response(JSON.stringify({ ok: true, handled: "grocery_check" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     // Otherwise classify as note
