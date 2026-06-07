@@ -13,8 +13,9 @@ import { cancelCalendarEvent, rescheduleCalendarEvent } from "@/lib/meetings.fun
 import { BirthdayBanner } from "@/components/BirthdayBanner";
 import {
   GripVertical, Cloud, CloudRain, Sun, Check, X, CalendarClock, Lightbulb,
-  Plus, MessageSquarePlus, Mail,
+  Plus, MessageSquarePlus, Mail, ShoppingCart, Trash2,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
