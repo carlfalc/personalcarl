@@ -146,14 +146,77 @@ async function callClaude(system: string, user: string, maxTokens = 1500): Promi
   return (data.content?.[0]?.text ?? "").toString();
 }
 
-async function detectIntent(transcript: string): Promise<"query" | "capture"> {
+async function detectIntent(transcript: string): Promise<"query" | "capture" | "complete"> {
   try {
     const raw = await callClaude(INTENT_PROMPT, transcript, 30);
     const parsed = JSON.parse(stripCodeFences(raw));
-    return parsed.intent === "query" ? "query" : "capture";
+    if (parsed.intent === "query") return "query";
+    if (parsed.intent === "complete") return "complete";
+    return "capture";
   } catch (e) {
     console.error("detectIntent failed", e);
     return "capture";
+  }
+}
+
+async function handleComplete(
+  supabase: ReturnType<typeof createClient>,
+  chatId: number,
+  message: string,
+  ownerId: string,
+): Promise<void> {
+  try {
+    const { data: openRows } = await supabase
+      .from("entries")
+      .select("id, content, type, due_date, priority")
+      .eq("user_id", ownerId)
+      .in("type", ["task", "todo"])
+      .neq("status", "done")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    const open = (openRows ?? []) as Array<{ id: string; content: string; type: string; due_date: string | null; priority: number | null }>;
+
+    if (open.length === 0) {
+      await sendTelegram(chatId, "You don't have any open tasks to complete.");
+      return;
+    }
+
+    const system = `You match a user's spoken/typed completion message against a list of their open tasks. Match LOOSELY on meaning, not exact wording. Return ONLY JSON: { "matched_ids": [uuid strings], "unmatched": string|null }. matched_ids may be empty if nothing clearly matches. unmatched is a short reason when nothing matches, otherwise null.`;
+    const userMsg = `Message: ${message}\n\nOpen tasks:\n${JSON.stringify(open.map((r) => ({ id: r.id, content: r.content })))}`;
+    const raw = await callClaude(system, userMsg, 400);
+    let matchedIds: string[] = [];
+    try {
+      const parsed = JSON.parse(stripCodeFences(raw));
+      if (Array.isArray(parsed.matched_ids)) {
+        const valid = new Set(open.map((r) => r.id));
+        matchedIds = parsed.matched_ids.filter((id: unknown) => typeof id === "string" && valid.has(id));
+      }
+    } catch (e) {
+      console.error("handleComplete parse error", e);
+    }
+
+    if (matchedIds.length === 0) {
+      const list = open.slice(0, 10).map((r, i) => `${i + 1}. ${r.content}`).join("\n");
+      await sendTelegram(chatId, `Couldn't find that task — current open tasks are:\n${list}`);
+      return;
+    }
+
+    const { error } = await supabase
+      .from("entries")
+      .update({ status: "done", updated_at: new Date().toISOString() })
+      .in("id", matchedIds);
+    if (error) {
+      console.error("complete update error", error);
+      await sendTelegram(chatId, "⚠️ Couldn't update those tasks, try again.");
+      return;
+    }
+
+    const completed = open.filter((r) => matchedIds.includes(r.id));
+    const lines = completed.map((r) => `✅ Done: ${r.content}`).join("\n");
+    await sendTelegram(chatId, lines);
+  } catch (e) {
+    console.error("handleComplete failed", e);
+    await sendTelegram(chatId, "⚠️ Couldn't complete that, try again.");
   }
 }
 
