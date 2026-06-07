@@ -81,6 +81,7 @@ export type Database = {
           status: string
           tags: string[]
           type: Database["public"]["Enums"]["entry_type"]
+          user_id: string
         }
         Insert: {
           content: string
@@ -91,6 +92,7 @@ export type Database = {
           status?: string
           tags?: string[]
           type: Database["public"]["Enums"]["entry_type"]
+          user_id?: string
         }
         Update: {
           content?: string
@@ -101,6 +103,7 @@ export type Database = {
           status?: string
           tags?: string[]
           type?: Database["public"]["Enums"]["entry_type"]
+          user_id?: string
         }
         Relationships: []
       }
@@ -113,6 +116,7 @@ export type Database = {
           meeting_id: string
           mime_type: string | null
           size_bytes: number | null
+          user_id: string
         }
         Insert: {
           created_at?: string
@@ -122,6 +126,7 @@ export type Database = {
           meeting_id: string
           mime_type?: string | null
           size_bytes?: number | null
+          user_id?: string
         }
         Update: {
           created_at?: string
@@ -131,6 +136,7 @@ export type Database = {
           meeting_id?: string
           mime_type?: string | null
           size_bytes?: number | null
+          user_id?: string
         }
         Relationships: [
           {
@@ -152,6 +158,7 @@ export type Database = {
           notes: string | null
           status: string
           title: string
+          user_id: string
         }
         Insert: {
           created_at?: string
@@ -162,6 +169,7 @@ export type Database = {
           notes?: string | null
           status?: string
           title: string
+          user_id?: string
         }
         Update: {
           created_at?: string
@@ -172,6 +180,7 @@ export type Database = {
           notes?: string | null
           status?: string
           title?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -187,6 +196,7 @@ export type Database = {
           relationship: string | null
           source: string | null
           updated_at: string
+          user_id: string
         }
         Insert: {
           birth_date?: string | null
@@ -199,6 +209,7 @@ export type Database = {
           relationship?: string | null
           source?: string | null
           updated_at?: string
+          user_id?: string
         }
         Update: {
           birth_date?: string | null
@@ -211,6 +222,7 @@ export type Database = {
           relationship?: string | null
           source?: string | null
           updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
