@@ -288,6 +288,43 @@ async function runMorningBriefing(owner: OwnerProfile, now: ReturnType<typeof no
   });
 }
 
+async function runEveningNudge(owner: OwnerProfile, now: ReturnType<typeof nowInAuckland>): Promise<void> {
+  if (!owner.nudge_enabled || !owner.telegram_chat_id || !owner.nudge_time) return;
+  const todayYmd = now.ymd;
+  const lastYmd = owner.last_nudge_sent ? aklDateString(new Date(owner.last_nudge_sent)) : null;
+  if (lastYmd === todayYmd) return;
+  if (!isAtOrPastTime(owner.nudge_time, now)) return;
+
+  // Open tasks/todos due today or overdue
+  const tasksRes = await db(
+    `entries?select=id,content,priority,status,due_date,type&user_id=eq.${owner.id}&type=in.(task,todo)&due_date=lte.${todayYmd}&status=neq.done&order=due_date.asc,priority.asc`,
+  );
+  const tasks = tasksRes.ok ? await tasksRes.json() as Array<{ content: string; due_date: string | null }> : [];
+
+  if (tasks.length === 0) {
+    // Still mark as sent so we don't keep checking every 15 min
+    await db(`profiles?id=eq.${owner.id}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ last_nudge_sent: new Date().toISOString() }),
+    });
+    return;
+  }
+
+  const lines = tasks.map((t) => {
+    const overdue = t.due_date && t.due_date < todayYmd;
+    return `• ${overdue ? "⚠️ OVERDUE — " : ""}${t.content}`;
+  }).join("\n");
+  const msg = `🌆 Still open today:\n${lines}\n\nReply "done with ..." to tick any off.`;
+  await sendTelegram(owner.telegram_chat_id, msg);
+
+  await db(`profiles?id=eq.${owner.id}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ last_nudge_sent: new Date().toISOString() }),
+  });
+}
+
 async function runBirthdayCheck(chatId: string, now: ReturnType<typeof nowInAuckland>): Promise<void> {
   // Run once per day, around 8am local. We use a marker row in a dedicated lightweight approach:
   // store the last birthday-check date in a schedules-like marker by abusing schedule's last_run? Simpler:
