@@ -327,6 +327,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          avatar_url: string | null
           briefing_enabled: boolean
           briefing_time: string
           created_at: string
@@ -352,6 +353,7 @@ export type Database = {
           weekly_review_time: string
         }
         Insert: {
+          avatar_url?: string | null
           briefing_enabled?: boolean
           briefing_time?: string
           created_at?: string
@@ -377,6 +379,7 @@ export type Database = {
           weekly_review_time?: string
         }
         Update: {
+          avatar_url?: string | null
           briefing_enabled?: boolean
           briefing_time?: string
           created_at?: string
