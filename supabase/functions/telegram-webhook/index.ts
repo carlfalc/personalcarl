@@ -125,7 +125,7 @@ function stripCodeFences(s: string): string {
   return s.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
 }
 
-async function callClaude(system: string, user: string): Promise<string> {
+async function callClaude(system: string, user: string, maxTokens = 1500): Promise<string> {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -135,7 +135,7 @@ async function callClaude(system: string, user: string): Promise<string> {
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-5",
-      max_tokens: 1500,
+      max_tokens: maxTokens,
       system,
       messages: [{ role: "user", content: user }],
     }),
@@ -143,6 +143,71 @@ async function callClaude(system: string, user: string): Promise<string> {
   const data = await res.json();
   if (!res.ok) throw new Error(`claude failed: ${JSON.stringify(data)}`);
   return (data.content?.[0]?.text ?? "").toString();
+}
+
+async function detectIntent(transcript: string): Promise<"query" | "capture"> {
+  try {
+    const raw = await callClaude(INTENT_PROMPT, transcript, 30);
+    const parsed = JSON.parse(stripCodeFences(raw));
+    return parsed.intent === "query" ? "query" : "capture";
+  } catch (e) {
+    console.error("detectIntent failed", e);
+    return "capture";
+  }
+}
+
+async function handleQuery(
+  supabase: ReturnType<typeof createClient>,
+  chatId: number,
+  question: string,
+  ownerId: string,
+): Promise<void> {
+  try {
+    const sinceMeetings = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const [entriesRes, meetingsRes, memoryRes, birthdaysRes] = await Promise.all([
+      supabase.from("entries")
+        .select("id, type, content, tags, priority, status, due_date, created_at")
+        .eq("user_id", ownerId)
+        .order("created_at", { ascending: false })
+        .limit(200),
+      supabase.from("meetings")
+        .select("title, datetime, location, notes, status")
+        .eq("user_id", ownerId)
+        .gte("datetime", sinceMeetings)
+        .order("datetime", { ascending: true }),
+      supabase.from("memory")
+        .select("fact, category, confidence")
+        .eq("user_id", ownerId),
+      supabase.from("birthdays")
+        .select("name, birth_date, notes")
+        .eq("user_id", ownerId),
+    ]);
+
+    let entries = entriesRes.data ?? [];
+    const meetings = meetingsRes.data ?? [];
+    const memory = memoryRes.data ?? [];
+    const birthdays = birthdaysRes.data ?? [];
+
+    let payload = { entries, meetings, memory, birthdays };
+    let json = JSON.stringify(payload);
+    if (json.length > 60000) {
+      // Truncate entries until under budget
+      while (json.length > 60000 && entries.length > 20) {
+        entries = entries.slice(0, Math.floor(entries.length * 0.7));
+        payload = { entries, meetings, memory, birthdays };
+        json = JSON.stringify(payload);
+      }
+    }
+
+    const nowNz = new Date().toLocaleString("en-NZ", { timeZone: "Pacific/Auckland", dateStyle: "full", timeStyle: "short" });
+    const system = `You are Carl's personal assistant. Answer his question using ONLY the data provided. Today's date/time in Pacific/Auckland is ${nowNz}. Be concise and direct — this is a Telegram chat, so plain text, no markdown headers, short lines. If the data doesn't contain the answer, say so plainly. When listing tasks or meetings, include due dates/times. Dates in the data are ISO format; present them in a friendly NZ format (e.g. 'Tue 9 Jun, 2:30pm').`;
+    const userMsg = `Question: ${question}\n\nData:\n${json}`;
+    const answer = (await callClaude(system, userMsg, 1000)).trim();
+    await sendTelegram(chatId, answer || "I couldn't find an answer in your data.");
+  } catch (e) {
+    console.error("handleQuery failed", e);
+    await sendTelegram(chatId, "⚠️ Couldn't look that up, try again.");
+  }
 }
 
 async function classifyNote(transcript: string): Promise<ParsedNote> {
