@@ -498,6 +498,12 @@ Deno.serve(async (req) => {
       } catch (e) {
         console.error("evening nudge failed", e);
       }
+
+      try {
+        await runWeeklyReview(owner, now);
+      } catch (e) {
+        console.error("weekly review failed", e);
+      }
     }
 
     return new Response(
