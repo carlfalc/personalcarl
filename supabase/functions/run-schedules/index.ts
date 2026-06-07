@@ -378,6 +378,15 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Morning briefing (gated by user preferences + already-sent-today check)
+    if (owner) {
+      try {
+        await runMorningBriefing(owner, now);
+      } catch (e) {
+        console.error("morning briefing failed", e);
+      }
+    }
+
     return new Response(
       JSON.stringify({ ok: true, now: now.ymd + "T" + now.hm, evaluated: schedules.length, ran: results }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
