@@ -297,29 +297,38 @@ export type Database = {
       }
       profiles: {
         Row: {
+          briefing_enabled: boolean
+          briefing_time: string
           created_at: string
           display_name: string
           gmail_connection_id: string | null
           gmail_email: string | null
           id: string
+          last_briefing_sent: string | null
           telegram_chat_id: string | null
           updated_at: string
         }
         Insert: {
+          briefing_enabled?: boolean
+          briefing_time?: string
           created_at?: string
           display_name?: string
           gmail_connection_id?: string | null
           gmail_email?: string | null
           id: string
+          last_briefing_sent?: string | null
           telegram_chat_id?: string | null
           updated_at?: string
         }
         Update: {
+          briefing_enabled?: boolean
+          briefing_time?: string
           created_at?: string
           display_name?: string
           gmail_connection_id?: string | null
           gmail_email?: string | null
           id?: string
+          last_briefing_sent?: string | null
           telegram_chat_id?: string | null
           updated_at?: string
         }

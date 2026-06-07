@@ -161,6 +161,130 @@ async function getOwnerChatId(): Promise<string | null> {
   return rows?.[0]?.telegram_chat_id ?? null;
 }
 
+type OwnerProfile = {
+  id: string;
+  telegram_chat_id: string | null;
+  briefing_enabled: boolean;
+  briefing_time: string | null;
+  last_briefing_sent: string | null;
+};
+
+async function getOwnerProfile(): Promise<OwnerProfile | null> {
+  const r = await db("profiles?select=id,telegram_chat_id,briefing_enabled,briefing_time,last_briefing_sent&order=created_at.asc&limit=1");
+  if (!r.ok) return null;
+  const rows = await r.json();
+  return rows?.[0] ?? null;
+}
+
+function aklDateString(d: Date): string {
+  const fmt = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" });
+  const p = Object.fromEntries(fmt.formatToParts(d).map((x) => [x.type, x.value]));
+  return `${p.year}-${p.month}-${p.day}`;
+}
+
+async function fetchWeather(): Promise<{ tmax: number; tmin: number; precipPct: number; code: number } | null> {
+  try {
+    const r = await fetch(
+      "https://api.open-meteo.com/v1/forecast?latitude=-39.93&longitude=175.05&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&timezone=Pacific%2FAuckland",
+    );
+    if (!r.ok) return null;
+    const data = await r.json();
+    const d = data?.daily;
+    if (!d) return null;
+    return {
+      tmax: d.temperature_2m_max?.[0],
+      tmin: d.temperature_2m_min?.[0],
+      precipPct: d.precipitation_probability_max?.[0] ?? 0,
+      code: d.weather_code?.[0] ?? 0,
+    };
+  } catch (e) {
+    console.error("weather fetch failed", e);
+    return null;
+  }
+}
+
+async function callClaudeBriefing(userJson: string): Promise<string> {
+  const system = "Write Carl's morning briefing for Telegram. Plain text, no markdown headers. Friendly but brief. Structure: a one-line greeting with the date and weather (max/min temp, rain chance in plain words), then '📅 Today:' with meetings (times in NZ format), then '✅ Tasks:' with due/overdue tasks (flag overdue ones), then '🎂' birthdays if any. If a section is empty, skip it. If everything is empty, say it's a clear day. End with one short encouraging line.";
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-5",
+      max_tokens: 800,
+      system,
+      messages: [{ role: "user", content: userJson }],
+    }),
+  });
+  if (!r.ok) throw new Error(`Anthropic briefing ${r.status}: ${await r.text()}`);
+  const data = await r.json();
+  const blocks = Array.isArray(data?.content) ? data.content : [];
+  return blocks.filter((b: any) => b?.type === "text").map((b: any) => b.text).join("\n\n").trim();
+}
+
+async function runMorningBriefing(owner: OwnerProfile, now: ReturnType<typeof nowInAuckland>): Promise<void> {
+  if (!owner.briefing_enabled || !owner.telegram_chat_id || !owner.briefing_time) return;
+  const todayYmd = now.ymd;
+  const lastYmd = owner.last_briefing_sent ? aklDateString(new Date(owner.last_briefing_sent)) : null;
+  if (lastYmd === todayYmd) return;
+  if (!isAtOrPastTime(owner.briefing_time, now)) return;
+
+  // Today's meetings
+  const dayStartUtc = new Date(`${todayYmd}T00:00:00+13:00`).toISOString();
+  const dayEndUtc = new Date(`${todayYmd}T23:59:59+13:00`).toISOString();
+  const meetingsRes = await db(
+    `meetings?select=title,datetime,location,notes&user_id=eq.${owner.id}&datetime=gte.${dayStartUtc}&datetime=lte.${dayEndUtc}&order=datetime.asc`,
+  );
+  const meetings = meetingsRes.ok ? await meetingsRes.json() : [];
+
+  // Tasks due today or overdue
+  const tasksRes = await db(
+    `entries?select=content,priority,status,due_date,type&user_id=eq.${owner.id}&due_date=lte.${todayYmd}&status=neq.done&order=priority.asc,due_date.asc`,
+  );
+  const tasks = tasksRes.ok ? await tasksRes.json() : [];
+
+  // Birthdays today + next 7 days
+  const bdRes = await db(`birthdays?select=name,birth_date,notes&user_id=eq.${owner.id}`);
+  const allBdays = bdRes.ok ? (await bdRes.json() as Array<{ name: string; birth_date: string; notes: string | null }>) : [];
+  const upcomingBdays: Array<{ name: string; birth_date: string; days_away: number }> = [];
+  const today = new Date(`${todayYmd}T00:00:00`);
+  for (const b of allBdays) {
+    const [, mm, dd] = b.birth_date.split("-");
+    for (let i = 0; i <= 7; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() + i);
+      const tm = String(d.getMonth() + 1).padStart(2, "0");
+      const td = String(d.getDate()).padStart(2, "0");
+      if (tm === mm && td === dd) {
+        upcomingBdays.push({ name: b.name, birth_date: b.birth_date, days_away: i });
+        break;
+      }
+    }
+  }
+
+  const weather = await fetchWeather();
+
+  const payload = {
+    date_nz: new Date().toLocaleDateString("en-NZ", { timeZone: TZ, weekday: "long", day: "numeric", month: "long" }),
+    weather,
+    meetings,
+    tasks,
+    birthdays: upcomingBdays,
+  };
+
+  const text = await callClaudeBriefing(JSON.stringify(payload));
+  if (text) await sendTelegram(owner.telegram_chat_id, text);
+
+  await db(`profiles?id=eq.${owner.id}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ last_briefing_sent: new Date().toISOString() }),
+  });
+}
+
 async function runBirthdayCheck(chatId: string, now: ReturnType<typeof nowInAuckland>): Promise<void> {
   // Run once per day, around 8am local. We use a marker row in a dedicated lightweight approach:
   // store the last birthday-check date in a schedules-like marker by abusing schedule's last_run? Simpler:
@@ -214,7 +338,8 @@ Deno.serve(async (req) => {
 
   try {
     const now = nowInAuckland();
-    const chatId = await getOwnerChatId();
+    const owner = await getOwnerProfile();
+    const chatId = owner?.telegram_chat_id ?? null;
 
     // Schedules
     const r = await db("schedules?select=*&enabled=eq.true");
@@ -250,6 +375,15 @@ Deno.serve(async (req) => {
         await runBirthdayCheck(chatId, now);
       } catch (e) {
         console.error("birthday check failed", e);
+      }
+    }
+
+    // Morning briefing (gated by user preferences + already-sent-today check)
+    if (owner) {
+      try {
+        await runMorningBriefing(owner, now);
+      } catch (e) {
+        console.error("morning briefing failed", e);
       }
     }
 
