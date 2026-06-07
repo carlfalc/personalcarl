@@ -167,10 +167,13 @@ type OwnerProfile = {
   briefing_enabled: boolean;
   briefing_time: string | null;
   last_briefing_sent: string | null;
+  nudge_enabled: boolean;
+  nudge_time: string | null;
+  last_nudge_sent: string | null;
 };
 
 async function getOwnerProfile(): Promise<OwnerProfile | null> {
-  const r = await db("profiles?select=id,telegram_chat_id,briefing_enabled,briefing_time,last_briefing_sent&order=created_at.asc&limit=1");
+  const r = await db("profiles?select=id,telegram_chat_id,briefing_enabled,briefing_time,last_briefing_sent,nudge_enabled,nudge_time,last_nudge_sent&order=created_at.asc&limit=1");
   if (!r.ok) return null;
   const rows = await r.json();
   return rows?.[0] ?? null;
