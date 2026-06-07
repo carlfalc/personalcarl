@@ -15,6 +15,9 @@ import {
   GripVertical, Cloud, CloudRain, Sun, Check, X, CalendarClock, Lightbulb,
   Plus, MessageSquarePlus, Mail,
 } from "lucide-react";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { addDays, format } from "date-fns";
 import {
   DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors,
