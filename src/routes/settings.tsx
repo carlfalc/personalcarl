@@ -35,7 +35,7 @@ function SettingsPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("telegram_chat_id, briefing_enabled, briefing_time")
+        .select("telegram_chat_id, briefing_enabled, briefing_time, nudge_enabled, nudge_time")
         .eq("id", userId!)
         .maybeSingle();
       if (error) throw error;
@@ -46,11 +46,16 @@ function SettingsPage() {
   const [chatId, setChatId] = useState("6824076380");
   const [briefingEnabled, setBriefingEnabled] = useState(true);
   const [briefingTime, setBriefingTime] = useState("07:00");
+  const [nudgeEnabled, setNudgeEnabled] = useState(true);
+  const [nudgeTime, setNudgeTime] = useState("18:00");
   useEffect(() => {
-    if (profile?.telegram_chat_id) setChatId(profile.telegram_chat_id);
-    if (typeof profile?.briefing_enabled === "boolean") setBriefingEnabled(profile.briefing_enabled);
-    if (profile?.briefing_time) setBriefingTime(String(profile.briefing_time).slice(0, 5));
-  }, [profile?.telegram_chat_id, profile?.briefing_enabled, profile?.briefing_time]);
+    const p = profile as any;
+    if (p?.telegram_chat_id) setChatId(p.telegram_chat_id);
+    if (typeof p?.briefing_enabled === "boolean") setBriefingEnabled(p.briefing_enabled);
+    if (p?.briefing_time) setBriefingTime(String(p.briefing_time).slice(0, 5));
+    if (typeof p?.nudge_enabled === "boolean") setNudgeEnabled(p.nudge_enabled);
+    if (p?.nudge_time) setNudgeTime(String(p.nudge_time).slice(0, 5));
+  }, [profile]);
 
   const saveChatId = useMutation({
     mutationFn: async () => {
@@ -80,6 +85,22 @@ function SettingsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["profile-settings"] });
       toast.success("Morning briefing saved");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
+  });
+
+  const saveNudge = useMutation({
+    mutationFn: async (next: { enabled: boolean; time: string }) => {
+      if (!userId) throw new Error("Not signed in");
+      const { error } = await supabase
+        .from("profiles")
+        .update({ nudge_enabled: next.enabled, nudge_time: next.time + ":00" } as any)
+        .eq("id", userId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["profile-settings"] });
+      toast.success("Evening nudge saved");
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
