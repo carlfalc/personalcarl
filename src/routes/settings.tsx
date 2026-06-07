@@ -161,6 +161,23 @@ function SettingsPage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
 
+  const saveDiarySummary = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      if (!userId) throw new Error("Not signed in");
+      const { error } = await supabase
+        .from("profiles")
+        .update({ diary_summary_enabled: enabled } as any)
+        .eq("id", userId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["profile-settings"] });
+      toast.success("Daily diary summary saved");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
+  });
+
+
   // ---- Birthdays ----
   const { data: birthdays = [] } = useQuery({
     queryKey: ["birthdays", userId],
