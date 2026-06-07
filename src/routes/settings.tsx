@@ -48,6 +48,9 @@ function SettingsPage() {
   const [briefingTime, setBriefingTime] = useState("07:00");
   const [nudgeEnabled, setNudgeEnabled] = useState(true);
   const [nudgeTime, setNudgeTime] = useState("18:00");
+  const [reviewEnabled, setReviewEnabled] = useState(true);
+  const [reviewDay, setReviewDay] = useState(0);
+  const [reviewTime, setReviewTime] = useState("19:00");
   useEffect(() => {
     const p = profile as any;
     if (p?.telegram_chat_id) setChatId(p.telegram_chat_id);
@@ -55,6 +58,9 @@ function SettingsPage() {
     if (p?.briefing_time) setBriefingTime(String(p.briefing_time).slice(0, 5));
     if (typeof p?.nudge_enabled === "boolean") setNudgeEnabled(p.nudge_enabled);
     if (p?.nudge_time) setNudgeTime(String(p.nudge_time).slice(0, 5));
+    if (typeof p?.weekly_review_enabled === "boolean") setReviewEnabled(p.weekly_review_enabled);
+    if (typeof p?.weekly_review_day === "number") setReviewDay(p.weekly_review_day);
+    if (p?.weekly_review_time) setReviewTime(String(p.weekly_review_time).slice(0, 5));
   }, [profile]);
 
   const saveChatId = useMutation({
