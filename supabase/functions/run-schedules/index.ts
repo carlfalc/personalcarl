@@ -174,10 +174,14 @@ type OwnerProfile = {
   weekly_review_day: number | null;
   weekly_review_time: string | null;
   last_weekly_review_sent: string | null;
+  grocery_send_enabled: boolean;
+  grocery_send_day: number | null;
+  grocery_send_time: string | null;
+  last_grocery_sent: string | null;
 };
 
 async function getOwnerProfile(): Promise<OwnerProfile | null> {
-  const r = await db("profiles?select=id,telegram_chat_id,briefing_enabled,briefing_time,last_briefing_sent,nudge_enabled,nudge_time,last_nudge_sent,weekly_review_enabled,weekly_review_day,weekly_review_time,last_weekly_review_sent&order=created_at.asc&limit=1");
+  const r = await db("profiles?select=id,telegram_chat_id,briefing_enabled,briefing_time,last_briefing_sent,nudge_enabled,nudge_time,last_nudge_sent,weekly_review_enabled,weekly_review_day,weekly_review_time,last_weekly_review_sent,grocery_send_enabled,grocery_send_day,grocery_send_time,last_grocery_sent&order=created_at.asc&limit=1");
   if (!r.ok) return null;
   const rows = await r.json();
   return rows?.[0] ?? null;
