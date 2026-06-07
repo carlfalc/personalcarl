@@ -6,6 +6,7 @@ import { Pencil, Trash2, Plus, Save } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthSession } from "@/hooks/useAuthSession";
+import { useAvatar, notifyAvatarChanged } from "@/hooks/useAvatar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -251,9 +252,127 @@ function SettingsPage() {
     setForm({ name: b.name, birth_date: b.birth_date, notes: b.notes ?? "" });
   };
 
+  // ---- Avatar upload ----
+  const avatarUrl = useAvatar();
+  const [uploading, setUploading] = useState(false);
+  const fileToAvatar = async (file: File) => {
+    if (!userId) {
+      toast.error("Not signed in");
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose an image file");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image must be under 5MB");
+      return;
+    }
+    setUploading(true);
+    try {
+      const ext = (file.name.split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g, "") || "png";
+      const path = `${userId}/avatar-${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("avatars")
+        .upload(path, file, { upsert: true, contentType: file.type });
+      if (upErr) throw upErr;
+
+      // Try to remove old avatar so storage doesn't bloat
+      const { data: prior } = await supabase
+        .from("profiles").select("avatar_url").eq("id", userId).maybeSingle();
+      const oldPath = (prior as any)?.avatar_url as string | null;
+
+      const { error: updErr } = await supabase
+        .from("profiles").update({ avatar_url: path } as any).eq("id", userId);
+      if (updErr) throw updErr;
+
+      if (oldPath && oldPath !== path) {
+        await supabase.storage.from("avatars").remove([oldPath]);
+      }
+
+      notifyAvatarChanged();
+      qc.invalidateQueries({ queryKey: ["profile-settings"] });
+      toast.success("Avatar updated");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const removeAvatar = async () => {
+    if (!userId) return;
+    setUploading(true);
+    try {
+      const { data: prior } = await supabase
+        .from("profiles").select("avatar_url").eq("id", userId).maybeSingle();
+      const oldPath = (prior as any)?.avatar_url as string | null;
+      const { error } = await supabase
+        .from("profiles").update({ avatar_url: null } as any).eq("id", userId);
+      if (error) throw error;
+      if (oldPath) await supabase.storage.from("avatars").remove([oldPath]);
+      notifyAvatarChanged();
+      toast.success("Avatar removed");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to remove");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   return (
     <div className="px-4 py-5 sm:px-6 sm:py-6 lg:px-8 space-y-5 max-w-3xl">
       <h1 className="text-2xl font-bold">Settings</h1>
+
+      <Card className="rounded-3xl border-border/60 bg-card p-5 shadow-sm">
+        <div className="mb-4 flex items-center gap-2">
+          <span className="text-lg">🖼️</span>
+          <h2 className="text-base font-bold">Profile picture</h2>
+        </div>
+        <div className="flex items-center gap-5">
+          <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-orange-300 to-orange-500 text-3xl shadow-sm">
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="Your avatar" className="h-full w-full object-cover" />
+            ) : (
+              <span>🧑‍🍳</span>
+            )}
+          </div>
+          <div className="flex-1 space-y-2">
+            <p className="text-xs text-muted-foreground">
+              PNG, JPG, or WebP. Up to 5MB. Shown in the sidebar.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="inline-flex">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={uploading}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) fileToAvatar(f);
+                    e.target.value = "";
+                  }}
+                />
+                <span className="inline-flex h-9 cursor-pointer items-center gap-1 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90">
+                  {uploading ? "Uploading…" : avatarUrl ? "Change image" : "Upload image"}
+                </span>
+              </label>
+              {avatarUrl && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={removeAvatar}
+                  disabled={uploading}
+                >
+                  <Trash2 className="h-4 w-4 mr-1" /> Remove
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      </Card>
+
 
       <Card className="rounded-3xl border-border/60 bg-card p-5 shadow-sm">
         <div className="mb-4 flex items-center gap-2">

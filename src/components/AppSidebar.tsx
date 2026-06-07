@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { useUserName } from "@/hooks/useUserName";
+import { useAvatar } from "@/hooks/useAvatar";
 
 const items = [
   { title: "Today",     subtitle: "Day at a glance",            url: "/",         emoji: "☀️", tint: "from-amber-200 to-orange-300" },
@@ -28,14 +29,19 @@ const items = [
 export function AppSidebar() {
   const currentPath = useRouterState({ select: (s) => s.location.pathname });
   const [userName] = useUserName();
+  const avatarUrl = useAvatar();
 
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarHeader className="bg-sidebar">
         <div className="flex items-center gap-3 px-2 py-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-300 to-orange-500 text-xl shadow-sm">
-            🧑‍🍳
+          <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-orange-300 to-orange-500 text-xl shadow-sm">
+            {avatarUrl ? (
+              <img src={avatarUrl} alt={`${userName}'s avatar`} className="h-full w-full object-cover" />
+            ) : (
+              <span>🧑‍🍳</span>
+            )}
           </div>
           <div className="flex flex-col group-data-[collapsible=icon]:hidden">
             <span className="text-base font-bold leading-tight">{userName}'s</span>
