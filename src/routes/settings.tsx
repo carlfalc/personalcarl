@@ -54,6 +54,7 @@ function SettingsPage() {
   const [grocerySendEnabled, setGrocerySendEnabled] = useState(false);
   const [grocerySendDay, setGrocerySendDay] = useState<number | "every">("every");
   const [grocerySendTime, setGrocerySendTime] = useState("16:00");
+  const [diarySummaryEnabled, setDiarySummaryEnabled] = useState(true);
   useEffect(() => {
     const p = profile as any;
     if (p?.telegram_chat_id) setChatId(p.telegram_chat_id);
