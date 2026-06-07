@@ -423,9 +423,10 @@ function TodayPage() {
         )}
       </Panel>
     ),
+    grocery: <GroceryPanel />,
   };
 
-  const DEFAULT_ORDER = ["tasks", "weather", "meetings", "ideas", "diary"];
+  const DEFAULT_ORDER = ["tasks", "weather", "meetings", "grocery", "ideas", "diary"];
   const [order, setOrder] = useState<string[]>(DEFAULT_ORDER);
 
   useEffect(() => {
