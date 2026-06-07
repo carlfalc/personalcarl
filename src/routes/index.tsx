@@ -461,8 +461,10 @@ function TodayPage() {
 
   return (
     <div className="px-4 py-5 sm:px-6 sm:py-6 lg:px-8 space-y-5">
+      <GlobalSearch />
       <BirthdayBanner />
       <WeekStrip />
+
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={order} strategy={rectSortingStrategy}>
