@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cancelCalendarEvent, rescheduleCalendarEvent } from "@/lib/meetings.functions";
 import { BirthdayBanner } from "@/components/BirthdayBanner";
+import { GlobalSearch } from "@/components/GlobalSearch";
 import {
   GripVertical, Cloud, CloudRain, Sun, Check, X, CalendarClock, Lightbulb,
   Plus, MessageSquarePlus, Mail, ShoppingCart, Trash2,
