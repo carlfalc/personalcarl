@@ -627,6 +627,18 @@ Deno.serve(async (req) => {
     // Otherwise classify as note
     const parsed = await classifyNote(transcript);
 
+    // Resolve owner (single-user app): pick the first profile.
+    const { data: ownerProfile } = await supabase
+      .from("profiles")
+      .select("id")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    const ownerId = ownerProfile?.id as string | undefined;
+    if (!ownerId) {
+      console.error("No owner profile found; cannot attribute new rows.");
+    }
+
     // Fallback: if nothing was extracted and the user didn't mention any known
     // keyword (task / meeting / idea / to-do / etc.), save the raw message as a task.
     const nothingExtracted =
@@ -645,26 +657,29 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (parsed.entries.length) {
+    if (parsed.entries.length && ownerId) {
       const rows = parsed.entries.map((e) => ({
         type: e.type, content: e.content, tags: e.tags ?? [],
         priority: e.priority ?? 2, status: "todo", due_date: e.due_date ?? null,
+        user_id: ownerId,
       }));
       const { error } = await supabase.from("entries").insert(rows);
       if (error) console.error("entries insert error", error);
     }
-    if (parsed.meetings.length) {
+    if (parsed.meetings.length && ownerId) {
       const rows = parsed.meetings.map((m) => ({
         title: m.title, datetime: m.datetime,
         location: m.location ?? null, notes: m.notes ?? null,
+        user_id: ownerId,
       }));
       const { error } = await supabase.from("meetings").insert(rows);
       if (error) console.error("meetings insert error", error);
     }
     let familyFollowUp: { memory_id: string; name: string } | null = null;
     for (const m of parsed.memory) {
+      if (!ownerId) break;
       const { data: existing } = await supabase
-        .from("memory").select("id").eq("fact", m.fact).maybeSingle();
+        .from("memory").select("id").eq("fact", m.fact).eq("user_id", ownerId).maybeSingle();
       if (existing) {
         await supabase.from("memory").update({
           category: m.category, confidence: m.confidence ?? 0.8,
@@ -685,6 +700,7 @@ Deno.serve(async (req) => {
           contact_phone: m.contact_phone ?? null,
           relationship: m.relationship ?? null,
           birth_date: m.birth_date ?? null,
+          user_id: ownerId,
         }).select("id").maybeSingle();
         if (m.category === "family" && inserted?.id && (!m.contact_email || !m.contact_phone || !m.relationship || !m.birth_date)) {
           familyFollowUp = { memory_id: inserted.id, name: m.fact };
