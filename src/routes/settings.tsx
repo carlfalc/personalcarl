@@ -460,8 +460,32 @@ function SettingsPage() {
               </Button>
             </div>
           </div>
+
+          <div className="border-t border-border/60 pt-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label htmlFor="diary-summary-toggle" className="text-sm font-semibold">Daily diary summary</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Each night at 21:30 NZ, merges today's diary entries into one tidy paragraph (if 2+ entries).
+                </p>
+              </div>
+              <input
+                id="diary-summary-toggle"
+                type="checkbox"
+                className="h-5 w-5 accent-primary"
+                checked={diarySummaryEnabled}
+                onChange={(e) => {
+                  setDiarySummaryEnabled(e.target.checked);
+                  saveDiarySummary.mutate(e.target.checked);
+                }}
+              />
+            </div>
+          </div>
         </div>
       </Card>
+
+
+
 
 
 
