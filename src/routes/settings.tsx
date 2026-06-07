@@ -383,8 +383,67 @@ function SettingsPage() {
               </Button>
             </div>
           </div>
+
+          <div className="border-t border-border/60 pt-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label htmlFor="grocery-toggle" className="text-sm font-semibold">Grocery list</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Sends your current shopping list to Telegram.
+                </p>
+              </div>
+              <input
+                id="grocery-toggle"
+                type="checkbox"
+                className="h-5 w-5 accent-primary"
+                checked={grocerySendEnabled}
+                onChange={(e) => setGrocerySendEnabled(e.target.checked)}
+              />
+            </div>
+            <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] items-end">
+              <div>
+                <Label htmlFor="grocery-day">Day</Label>
+                <select
+                  id="grocery-day"
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={String(grocerySendDay)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setGrocerySendDay(v === "every" ? "every" : parseInt(v, 10));
+                  }}
+                  disabled={!grocerySendEnabled}
+                >
+                  <option value="every">Every day</option>
+                  <option value="0">Sunday</option>
+                  <option value="1">Monday</option>
+                  <option value="2">Tuesday</option>
+                  <option value="3">Wednesday</option>
+                  <option value="4">Thursday</option>
+                  <option value="5">Friday</option>
+                  <option value="6">Saturday</option>
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="grocery-time">Send at</Label>
+                <Input
+                  id="grocery-time"
+                  type="time"
+                  value={grocerySendTime}
+                  onChange={(e) => setGrocerySendTime(e.target.value)}
+                  disabled={!grocerySendEnabled}
+                />
+              </div>
+              <Button
+                onClick={() => saveGrocery.mutate({ enabled: grocerySendEnabled, day: grocerySendDay, time: grocerySendTime })}
+                disabled={saveGrocery.isPending}
+              >
+                <Save className="h-4 w-4 mr-1" /> Save
+              </Button>
+            </div>
+          </div>
         </div>
       </Card>
+
 
 
 
