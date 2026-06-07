@@ -425,6 +425,12 @@ Deno.serve(async (req) => {
       } catch (e) {
         console.error("morning briefing failed", e);
       }
+
+      try {
+        await runEveningNudge(owner, now);
+      } catch (e) {
+        console.error("evening nudge failed", e);
+      }
     }
 
     return new Response(
