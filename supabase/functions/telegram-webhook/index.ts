@@ -80,10 +80,13 @@ const COMPOSE_PROMPT = `You write a short professional email on behalf of the se
 
 const FAMILY_PROFILE_PROMPT = `Extract family contact/profile details from the user's reply. Return ONLY valid JSON: { "contact_email": string|null, "contact_phone": string|null, "relationship": string|null, "birth_date": string|null, "has_no_more_details": boolean }. Use YYYY-MM-DD for birth_date when possible. If they say they don't have the details, set has_no_more_details true.`;
 
-const INTENT_PROMPT = `Classify this Telegram message. Return ONLY JSON: { "intent": "query" | "capture" | "complete" }.
+const INTENT_PROMPT = `Classify this Telegram message. Return ONLY JSON: { "intent": "query" | "capture" | "complete" | "grocery_add" | "grocery_query" | "grocery_check" }.
 - "query": asking about existing data (tasks, meetings, ideas, memory, birthdays, schedule). Examples: "what's on today?", "when is my meeting with Sandesh?", "do I have anything overdue?".
-- "complete": marking an existing task/todo as done. Examples: "done with the plumber one", "mark the FENZ email task as done", "finished the roster", "tick off buying milk", "I did the dishes".
-- "capture": dictating new content to save (tasks, ideas, diary, meetings, memory, family, email requests). Examples: "add a task to call John", "remind me to buy milk", "email kitchen", "I had a good day".`;
+- "complete": marking an existing task/todo as done. Examples: "done with the plumber one", "mark the FENZ email task as done", "finished the roster".
+- "grocery_add": adding items to the grocery/shopping list. Examples: "add milk and eggs to the grocery list", "put 2L milk on the shopping list", "I need bread", "grocery: bananas, cheese".
+- "grocery_query": asking what's on the grocery/shopping list. Examples: "what's on the grocery list?", "what do I need to buy?", "show me my shopping list".
+- "grocery_check": ticking off grocery items (already bought). Examples: "got the milk", "bought the eggs", "picked up bread and butter", "cross off cheese".
+- "capture": dictating new tasks, ideas, diary, meetings, memory, family, or email requests. Examples: "add a task to call John", "remind me to buy milk for the recipe later", "email kitchen", "I had a good day".`;
 
 // ---------- Telegram helpers ----------
 async function sendTelegram(chatId: number, text: string): Promise<void> {
