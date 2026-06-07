@@ -107,6 +107,36 @@ export type Database = {
         }
         Relationships: []
       }
+      grocery_items: {
+        Row: {
+          checked: boolean
+          created_at: string
+          id: string
+          item: string
+          quantity: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          checked?: boolean
+          created_at?: string
+          id?: string
+          item: string
+          quantity?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          checked?: boolean
+          created_at?: string
+          id?: string
+          item?: string
+          quantity?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       meeting_documents: {
         Row: {
           created_at: string
@@ -303,8 +333,12 @@ export type Database = {
           display_name: string
           gmail_connection_id: string | null
           gmail_email: string | null
+          grocery_send_day: number | null
+          grocery_send_enabled: boolean
+          grocery_send_time: string
           id: string
           last_briefing_sent: string | null
+          last_grocery_sent: string | null
           last_nudge_sent: string | null
           last_weekly_review_sent: string | null
           nudge_enabled: boolean
@@ -322,8 +356,12 @@ export type Database = {
           display_name?: string
           gmail_connection_id?: string | null
           gmail_email?: string | null
+          grocery_send_day?: number | null
+          grocery_send_enabled?: boolean
+          grocery_send_time?: string
           id: string
           last_briefing_sent?: string | null
+          last_grocery_sent?: string | null
           last_nudge_sent?: string | null
           last_weekly_review_sent?: string | null
           nudge_enabled?: boolean
@@ -341,8 +379,12 @@ export type Database = {
           display_name?: string
           gmail_connection_id?: string | null
           gmail_email?: string | null
+          grocery_send_day?: number | null
+          grocery_send_enabled?: boolean
+          grocery_send_time?: string
           id?: string
           last_briefing_sent?: string | null
+          last_grocery_sent?: string | null
           last_nudge_sent?: string | null
           last_weekly_review_sent?: string | null
           nudge_enabled?: boolean
