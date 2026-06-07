@@ -542,6 +542,12 @@ Deno.serve(async (req) => {
       } catch (e) {
         console.error("weekly review failed", e);
       }
+
+      try {
+        await runGrocerySend(owner, now);
+      } catch (e) {
+        console.error("grocery send failed", e);
+      }
     }
 
     return new Response(
