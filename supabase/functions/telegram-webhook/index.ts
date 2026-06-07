@@ -769,12 +769,18 @@ Deno.serve(async (req) => {
       console.error("No owner profile found; cannot attribute new rows.");
     }
 
-    // Intent detection: is this a question about existing data, or new content?
+    // Intent detection: question, completion, or new content?
     if (ownerId) {
       const intent = await detectIntent(transcript);
       if (intent === "query") {
         await handleQuery(supabase, chatId, transcript, ownerId);
         return new Response(JSON.stringify({ ok: true, handled: "query" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (intent === "complete") {
+        await handleComplete(supabase, chatId, transcript, ownerId);
+        return new Response(JSON.stringify({ ok: true, handled: "complete" }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
