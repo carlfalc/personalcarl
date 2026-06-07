@@ -396,6 +396,40 @@ async function runWeeklyReview(owner: OwnerProfile, now: ReturnType<typeof nowIn
   });
 }
 
+async function runGrocerySend(owner: OwnerProfile, now: ReturnType<typeof nowInAuckland>): Promise<void> {
+  if (!owner.grocery_send_enabled || !owner.telegram_chat_id || !owner.grocery_send_time) return;
+  // null day means every day; otherwise must match Auckland day-of-week
+  if (owner.grocery_send_day !== null && owner.grocery_send_day !== now.dow) return;
+  const todayYmd = now.ymd;
+  const lastYmd = owner.last_grocery_sent ? aklDateString(new Date(owner.last_grocery_sent)) : null;
+  if (lastYmd === todayYmd) return;
+  if (!isAtOrPastTime(owner.grocery_send_time, now)) return;
+
+  const r = await db(
+    `grocery_items?select=item,quantity&user_id=eq.${owner.id}&checked=eq.false&order=created_at.asc`,
+  );
+  const items = r.ok ? await r.json() as Array<{ item: string; quantity: string | null }> : [];
+
+  if (items.length === 0) {
+    // Still mark sent so we don't keep evaluating every 15 minutes
+    await db(`profiles?id=eq.${owner.id}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ last_grocery_sent: new Date().toISOString() }),
+    });
+    return;
+  }
+
+  const lines = items.map((i) => `• ${i.quantity ? `${i.quantity} ${i.item}` : i.item}`).join("\n");
+  await sendTelegram(owner.telegram_chat_id, `🛒 Grocery list:\n${lines}`);
+
+  await db(`profiles?id=eq.${owner.id}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ last_grocery_sent: new Date().toISOString() }),
+  });
+}
+
 async function runBirthdayCheck(chatId: string, now: ReturnType<typeof nowInAuckland>): Promise<void> {
   // Run once per day, around 8am local. We use a marker row in a dedicated lightweight approach:
   // store the last birthday-check date in a schedules-like marker by abusing schedule's last_run? Simpler:
