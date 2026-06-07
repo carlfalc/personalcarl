@@ -80,6 +80,10 @@ const COMPOSE_PROMPT = `You write a short professional email on behalf of the se
 
 const FAMILY_PROFILE_PROMPT = `Extract family contact/profile details from the user's reply. Return ONLY valid JSON: { "contact_email": string|null, "contact_phone": string|null, "relationship": string|null, "birth_date": string|null, "has_no_more_details": boolean }. Use YYYY-MM-DD for birth_date when possible. If they say they don't have the details, set has_no_more_details true.`;
 
+const INTENT_PROMPT = `Classify this Telegram message as either a QUESTION about the user's existing data, or new CONTENT to save. Return ONLY JSON: { "intent": "query" | "capture" }.
+- "query": asking about tasks, meetings, ideas, memory, birthdays, schedule, what they know, what's due, when something is, etc. Examples: "what's on today?", "when is my meeting with Sandesh?", "what ideas have I saved?", "when is Freya's birthday?", "do I have anything overdue?", "what do you know about me?".
+- "capture": dictating new tasks, ideas, diary entries, meetings, memory, family, or email requests. Examples: "add a task to call John", "remind me to buy milk", "email kitchen", "I had a good day".`;
+
 // ---------- Telegram helpers ----------
 async function sendTelegram(chatId: number, text: string): Promise<void> {
   try {
@@ -121,7 +125,7 @@ function stripCodeFences(s: string): string {
   return s.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
 }
 
-async function callClaude(system: string, user: string): Promise<string> {
+async function callClaude(system: string, user: string, maxTokens = 1500): Promise<string> {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -131,7 +135,7 @@ async function callClaude(system: string, user: string): Promise<string> {
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-5",
-      max_tokens: 1500,
+      max_tokens: maxTokens,
       system,
       messages: [{ role: "user", content: user }],
     }),
@@ -139,6 +143,71 @@ async function callClaude(system: string, user: string): Promise<string> {
   const data = await res.json();
   if (!res.ok) throw new Error(`claude failed: ${JSON.stringify(data)}`);
   return (data.content?.[0]?.text ?? "").toString();
+}
+
+async function detectIntent(transcript: string): Promise<"query" | "capture"> {
+  try {
+    const raw = await callClaude(INTENT_PROMPT, transcript, 30);
+    const parsed = JSON.parse(stripCodeFences(raw));
+    return parsed.intent === "query" ? "query" : "capture";
+  } catch (e) {
+    console.error("detectIntent failed", e);
+    return "capture";
+  }
+}
+
+async function handleQuery(
+  supabase: ReturnType<typeof createClient>,
+  chatId: number,
+  question: string,
+  ownerId: string,
+): Promise<void> {
+  try {
+    const sinceMeetings = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const [entriesRes, meetingsRes, memoryRes, birthdaysRes] = await Promise.all([
+      supabase.from("entries")
+        .select("id, type, content, tags, priority, status, due_date, created_at")
+        .eq("user_id", ownerId)
+        .order("created_at", { ascending: false })
+        .limit(200),
+      supabase.from("meetings")
+        .select("title, datetime, location, notes, status")
+        .eq("user_id", ownerId)
+        .gte("datetime", sinceMeetings)
+        .order("datetime", { ascending: true }),
+      supabase.from("memory")
+        .select("fact, category, confidence")
+        .eq("user_id", ownerId),
+      supabase.from("birthdays")
+        .select("name, birth_date, notes")
+        .eq("user_id", ownerId),
+    ]);
+
+    let entries = entriesRes.data ?? [];
+    const meetings = meetingsRes.data ?? [];
+    const memory = memoryRes.data ?? [];
+    const birthdays = birthdaysRes.data ?? [];
+
+    let payload = { entries, meetings, memory, birthdays };
+    let json = JSON.stringify(payload);
+    if (json.length > 60000) {
+      // Truncate entries until under budget
+      while (json.length > 60000 && entries.length > 20) {
+        entries = entries.slice(0, Math.floor(entries.length * 0.7));
+        payload = { entries, meetings, memory, birthdays };
+        json = JSON.stringify(payload);
+      }
+    }
+
+    const nowNz = new Date().toLocaleString("en-NZ", { timeZone: "Pacific/Auckland", dateStyle: "full", timeStyle: "short" });
+    const system = `You are Carl's personal assistant. Answer his question using ONLY the data provided. Today's date/time in Pacific/Auckland is ${nowNz}. Be concise and direct — this is a Telegram chat, so plain text, no markdown headers, short lines. If the data doesn't contain the answer, say so plainly. When listing tasks or meetings, include due dates/times. Dates in the data are ISO format; present them in a friendly NZ format (e.g. 'Tue 9 Jun, 2:30pm').`;
+    const userMsg = `Question: ${question}\n\nData:\n${json}`;
+    const answer = (await callClaude(system, userMsg, 1000)).trim();
+    await sendTelegram(chatId, answer || "I couldn't find an answer in your data.");
+  } catch (e) {
+    console.error("handleQuery failed", e);
+    await sendTelegram(chatId, "⚠️ Couldn't look that up, try again.");
+  }
 }
 
 async function classifyNote(transcript: string): Promise<ParsedNote> {
@@ -624,9 +693,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Otherwise classify as note
-    const parsed = await classifyNote(transcript);
-
     // Resolve owner (single-user app): pick the first profile.
     const { data: ownerProfile } = await supabase
       .from("profiles")
@@ -638,6 +704,20 @@ Deno.serve(async (req) => {
     if (!ownerId) {
       console.error("No owner profile found; cannot attribute new rows.");
     }
+
+    // Intent detection: is this a question about existing data, or new content?
+    if (ownerId) {
+      const intent = await detectIntent(transcript);
+      if (intent === "query") {
+        await handleQuery(supabase, chatId, transcript, ownerId);
+        return new Response(JSON.stringify({ ok: true, handled: "query" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    // Otherwise classify as note
+    const parsed = await classifyNote(transcript);
 
     // Fallback: if nothing was extracted and the user didn't mention any known
     // keyword (task / meeting / idea / to-do / etc.), save the raw message as a task.
