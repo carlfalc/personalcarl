@@ -616,6 +616,12 @@ Deno.serve(async (req) => {
       } catch (e) {
         console.error("grocery send failed", e);
       }
+
+      try {
+        await runDailySummary(owner, now);
+      } catch (e) {
+        console.error("daily diary summary failed", e);
+      }
     }
 
     return new Response(
