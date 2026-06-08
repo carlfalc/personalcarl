@@ -161,12 +161,6 @@ function EmailPage() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
-      toast.success("Draft saved to Gmail");
-      qc.invalidateQueries({ queryKey: ["recent-drafts"] });
-      setTranscript(""); setTo(""); setSubject(""); setBody("");
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
 
   const loadDraft = (d: { recipient: string | null; subject: string | null; body_preview: string | null }) => {
     setTo(d.recipient ?? "");
