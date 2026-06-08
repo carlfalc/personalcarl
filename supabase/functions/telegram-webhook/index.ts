@@ -126,7 +126,26 @@ async function transcribeWithWhisper(audio: Blob): Promise<string> {
 }
 
 function stripCodeFences(s: string): string {
-  return s.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+  let t = s.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+  // Extract the first balanced JSON object/array if extra prose surrounds it
+  const start = t.search(/[{\[]/);
+  if (start === -1) return t;
+  const open = t[start];
+  const close = open === "{" ? "}" : "]";
+  let depth = 0, inStr = false, esc = false, end = -1;
+  for (let i = start; i < t.length; i++) {
+    const c = t[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === "\\") esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') inStr = true;
+    else if (c === open) depth++;
+    else if (c === close) { depth--; if (depth === 0) { end = i; break; } }
+  }
+  return end > start ? t.slice(start, end + 1) : t.slice(start);
 }
 
 async function callClaude(system: string, user: string, maxTokens = 1500): Promise<string> {
