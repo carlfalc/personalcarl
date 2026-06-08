@@ -137,6 +137,51 @@ export type Database = {
         }
         Relationships: []
       }
+      images: {
+        Row: {
+          caption: string | null
+          created_at: string
+          height: number | null
+          id: string
+          mime_type: string | null
+          size_bytes: number | null
+          source: string
+          storage_path: string
+          telegram_message_id: number | null
+          updated_at: string
+          user_id: string
+          width: number | null
+        }
+        Insert: {
+          caption?: string | null
+          created_at?: string
+          height?: number | null
+          id?: string
+          mime_type?: string | null
+          size_bytes?: number | null
+          source?: string
+          storage_path: string
+          telegram_message_id?: number | null
+          updated_at?: string
+          user_id: string
+          width?: number | null
+        }
+        Update: {
+          caption?: string | null
+          created_at?: string
+          height?: number | null
+          id?: string
+          mime_type?: string | null
+          size_bytes?: number | null
+          source?: string
+          storage_path?: string
+          telegram_message_id?: number | null
+          updated_at?: string
+          user_id?: string
+          width?: number | null
+        }
+        Relationships: []
+      }
       meeting_documents: {
         Row: {
           created_at: string

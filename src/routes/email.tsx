@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Mic, MicOff, Sparkles, Send, Mail, ExternalLink } from "lucide-react";
+import { Mic, MicOff, Sparkles, Send, Mail, ExternalLink, Paperclip, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   transcribeAudio,
@@ -16,6 +16,7 @@ import {
   listRecentDrafts,
   lookupRecipient,
 } from "@/lib/email.functions";
+import { getImagesForAttach } from "@/lib/images.functions";
 
 export const Route = createFileRoute("/email")({
   head: () => ({ meta: [{ title: "Email — Voice Drafts" }] }),
@@ -29,6 +30,7 @@ function EmailPage() {
   const createDraft = useServerFn(createGmailDraft);
   const listDrafts = useServerFn(listRecentDrafts);
   const lookup = useServerFn(lookupRecipient);
+  const getAtts = useServerFn(getImagesForAttach);
 
   const draftsQ = useQuery({ queryKey: ["recent-drafts"], queryFn: () => listDrafts() });
 
@@ -40,6 +42,7 @@ function EmailPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<Array<{ name: string; email: string }>>([]);
   const [showSuggest, setShowSuggest] = useState(false);
+  const [attachments, setAttachments] = useState<Array<{ id: string; signed_url: string; caption: string | null; mime_type: string }>>([]);
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const lookupTimer = useRef<number | null>(null);
@@ -57,6 +60,21 @@ function EmailPage() {
       toast.success("Loaded email details from meeting");
     } catch {}
   }, []);
+
+  // Load attachments queued from Images page
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("email-attachments");
+      if (!raw) return;
+      sessionStorage.removeItem("email-attachments");
+      const ids = JSON.parse(raw) as string[];
+      if (!Array.isArray(ids) || ids.length === 0) return;
+      getAtts({ data: { ids } }).then((res) => {
+        setAttachments(res);
+        toast.success(`${res.length} image${res.length > 1 ? "s" : ""} attached`);
+      }).catch(() => toast.error("Couldn't load attachments"));
+    } catch {}
+  }, [getAtts]);
 
   // Debounced recipient lookup
   useEffect(() => {
@@ -135,11 +153,11 @@ function EmailPage() {
   };
 
   const handleSaveDraft = useMutation({
-    mutationFn: () => createDraft({ data: { to, subject, body } }),
+    mutationFn: () => createDraft({ data: { to, subject, body, attachmentIds: attachments.map((a) => a.id) } }),
     onSuccess: () => {
       toast.success("Draft saved to Gmail");
       qc.invalidateQueries({ queryKey: ["recent-drafts"] });
-      setTranscript(""); setTo(""); setSubject(""); setBody("");
+      setTranscript(""); setTo(""); setSubject(""); setBody(""); setAttachments([]);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -237,6 +255,26 @@ function EmailPage() {
               <Label htmlFor="body">Body</Label>
               <Textarea id="body" value={body} onChange={(e) => setBody(e.target.value)} rows={8} />
             </div>
+            {attachments.length > 0 && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1"><Paperclip className="h-3.5 w-3.5" /> Attachments ({attachments.length})</Label>
+                <div className="flex flex-wrap gap-2">
+                  {attachments.map((a) => (
+                    <div key={a.id} className="relative group">
+                      <img src={a.signed_url} alt={a.caption ?? ""} className="h-16 w-16 rounded-md object-cover border" />
+                      <button
+                        type="button"
+                        onClick={() => setAttachments((prev) => prev.filter((x) => x.id !== a.id))}
+                        className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-black/70 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-red-500"
+                        aria-label="Remove"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <Button
               className="w-full"
               onClick={() => handleSaveDraft.mutate()}

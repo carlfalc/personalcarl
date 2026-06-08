@@ -16,6 +16,7 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SchedulesRouteImport } from './routes/schedules'
 import { Route as MeetingsRouteImport } from './routes/meetings'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as ImagesRouteImport } from './routes/images'
 import { Route as IdeasRouteImport } from './routes/ideas'
 import { Route as EmailRouteImport } from './routes/email'
 import { Route as DiaryRouteImport } from './routes/diary'
@@ -57,6 +58,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ImagesRoute = ImagesRouteImport.update({
+  id: '/images',
+  path: '/images',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IdeasRoute = IdeasRouteImport.update({
   id: '/ideas',
   path: '/ideas',
@@ -89,6 +95,7 @@ export interface FileRoutesByFullPath {
   '/diary': typeof DiaryRoute
   '/email': typeof EmailRoute
   '/ideas': typeof IdeasRoute
+  '/images': typeof ImagesRoute
   '/login': typeof LoginRoute
   '/meetings': typeof MeetingsRoute
   '/schedules': typeof SchedulesRoute
@@ -103,6 +110,7 @@ export interface FileRoutesByTo {
   '/diary': typeof DiaryRoute
   '/email': typeof EmailRoute
   '/ideas': typeof IdeasRoute
+  '/images': typeof ImagesRoute
   '/login': typeof LoginRoute
   '/meetings': typeof MeetingsRoute
   '/schedules': typeof SchedulesRoute
@@ -118,6 +126,7 @@ export interface FileRoutesById {
   '/diary': typeof DiaryRoute
   '/email': typeof EmailRoute
   '/ideas': typeof IdeasRoute
+  '/images': typeof ImagesRoute
   '/login': typeof LoginRoute
   '/meetings': typeof MeetingsRoute
   '/schedules': typeof SchedulesRoute
@@ -134,6 +143,7 @@ export interface FileRouteTypes {
     | '/diary'
     | '/email'
     | '/ideas'
+    | '/images'
     | '/login'
     | '/meetings'
     | '/schedules'
@@ -148,6 +158,7 @@ export interface FileRouteTypes {
     | '/diary'
     | '/email'
     | '/ideas'
+    | '/images'
     | '/login'
     | '/meetings'
     | '/schedules'
@@ -162,6 +173,7 @@ export interface FileRouteTypes {
     | '/diary'
     | '/email'
     | '/ideas'
+    | '/images'
     | '/login'
     | '/meetings'
     | '/schedules'
@@ -177,6 +189,7 @@ export interface RootRouteChildren {
   DiaryRoute: typeof DiaryRoute
   EmailRoute: typeof EmailRoute
   IdeasRoute: typeof IdeasRoute
+  ImagesRoute: typeof ImagesRoute
   LoginRoute: typeof LoginRoute
   MeetingsRoute: typeof MeetingsRoute
   SchedulesRoute: typeof SchedulesRoute
@@ -237,6 +250,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/images': {
+      id: '/images'
+      path: '/images'
+      fullPath: '/images'
+      preLoaderRoute: typeof ImagesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/ideas': {
       id: '/ideas'
       path: '/ideas'
@@ -281,6 +301,7 @@ const rootRouteChildren: RootRouteChildren = {
   DiaryRoute: DiaryRoute,
   EmailRoute: EmailRoute,
   IdeasRoute: IdeasRoute,
+  ImagesRoute: ImagesRoute,
   LoginRoute: LoginRoute,
   MeetingsRoute: MeetingsRoute,
   SchedulesRoute: SchedulesRoute,

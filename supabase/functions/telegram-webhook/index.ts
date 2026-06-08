@@ -824,8 +824,13 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Auto-link this chat to the (single) owner profile if not yet linked,
-    // so morning briefings & scheduled messages can reach the user.
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    // Auto-link this chat to the (single) owner profile if not yet linked.
+    let ownerIdEarly: string | null = null;
     try {
       const { data: linkOwner } = await supabase
         .from("profiles")
@@ -833,24 +838,72 @@ Deno.serve(async (req) => {
         .order("created_at", { ascending: true })
         .limit(1)
         .maybeSingle();
+      ownerIdEarly = (linkOwner?.id as string) ?? null;
       if (linkOwner?.id && String(linkOwner.telegram_chat_id ?? "") !== String(chatId)) {
         await supabase.from("profiles").update({ telegram_chat_id: String(chatId) }).eq("id", linkOwner.id);
         await sendTelegram(chatId, "🔗 Linked this chat — you'll now receive scheduled briefings and reminders here.");
       }
     } catch (e) { console.error("auto-link chat_id failed", e); }
 
-    // /start — friendly welcome
-    if (/^\/start\b/i.test(transcript)) {
-      await sendTelegram(chatId, "👋 Hi! I'm your assistant. Send a voice note or text to capture tasks, meetings, ideas, or ask a question.");
-      return new Response(JSON.stringify({ ok: true, handled: "start" }), {
+    // ---------- Photo / image handling ----------
+    const photoFileId: string | null = (() => {
+      if (Array.isArray(message.photo) && message.photo.length > 0) {
+        const largest = [...message.photo].sort((a: any, b: any) => (b.width ?? 0) * (b.height ?? 0) - (a.width ?? 0) * (a.height ?? 0))[0];
+        return largest?.file_id ?? null;
+      }
+      if (message.document && typeof message.document.mime_type === "string" && message.document.mime_type.startsWith("image/")) {
+        return message.document.file_id ?? null;
+      }
+      return null;
+    })();
+    const photoDims = Array.isArray(message.photo) && message.photo.length
+      ? (() => { const l = [...message.photo].sort((a: any, b: any) => (b.width ?? 0) * (b.height ?? 0) - (a.width ?? 0) * (a.height ?? 0))[0]; return { width: l?.width ?? null, height: l?.height ?? null }; })()
+      : { width: message.document?.thumb?.width ?? null, height: message.document?.thumb?.height ?? null };
+
+    if (photoFileId) {
+      if (!ownerIdEarly) {
+        await sendTelegram(chatId, "⚠️ No profile found to save the image against.");
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      try {
+        const infoRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getFile?file_id=${encodeURIComponent(photoFileId)}`);
+        const info = await infoRes.json();
+        if (!info.ok) throw new Error(`getFile failed: ${JSON.stringify(info)}`);
+        const filePath = info.result.file_path as string;
+        const fileRes = await fetch(`https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/${filePath}`);
+        if (!fileRes.ok) throw new Error(`download failed: ${fileRes.status}`);
+        const bytes = new Uint8Array(await fileRes.arrayBuffer());
+        if (bytes.byteLength > 15 * 1024 * 1024) {
+          await sendTelegram(chatId, "⚠️ Image is too large (>15 MB).");
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        const ext = (filePath.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+        const mime = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : ext === "gif" ? "image/gif" : "image/jpeg";
+        const uuid = crypto.randomUUID();
+        const storagePath = `${ownerIdEarly}/${uuid}.${ext}`;
+        const { error: upErr } = await supabase.storage.from("telegram-images").upload(storagePath, bytes, { contentType: mime, upsert: false });
+        if (upErr) throw upErr;
+        const { error: insErr } = await supabase.from("images").insert({
+          user_id: ownerIdEarly,
+          storage_path: storagePath,
+          caption: typeof message.caption === "string" ? message.caption : null,
+          width: photoDims.width,
+          height: photoDims.height,
+          mime_type: mime,
+          size_bytes: bytes.byteLength,
+          source: "telegram",
+          telegram_message_id: message.message_id ?? null,
+        });
+        if (insErr) throw insErr;
+        await sendTelegram(chatId, "📸 Saved to Images.");
+      } catch (e) {
+        console.error("photo save failed", e);
+        await sendTelegram(chatId, `⚠️ Couldn't save that image: ${e instanceof Error ? e.message : "unknown"}`);
+      }
+      return new Response(JSON.stringify({ ok: true, handled: "photo" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
 
     let transcript = "";
     if (message.voice?.file_id) {
@@ -858,12 +911,20 @@ Deno.serve(async (req) => {
     } else if (typeof message.text === "string") {
       transcript = message.text.trim();
     } else {
-      await sendTelegram(chatId, "Send me a voice note or text.");
+      await sendTelegram(chatId, "Send me a voice note, text, or photo.");
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     if (!transcript) {
       await sendTelegram(chatId, "Couldn't read that, sorry.");
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // /start — friendly welcome
+    if (/^\/start\b/i.test(transcript)) {
+      await sendTelegram(chatId, "👋 Hi! I'm your assistant. Send a voice note, text, or photo to capture tasks, meetings, ideas, or save images.");
+      return new Response(JSON.stringify({ ok: true, handled: "start" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Active family profile follow-up, unless this is clearly a new command

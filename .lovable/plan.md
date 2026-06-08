@@ -1,63 +1,50 @@
-# Voice-to-Draft Email Plan
+## Goal
 
-## Overview
+When you send a photo to the Telegram bot, it gets saved into Lovable Cloud and shows up on a new **Images** page in the sidebar. From that page you can delete each image, share it, print it, save it as PDF, and attach it to a draft on the Email compose page.
 
-Add a multi-user authentication system and a dedicated **Email** page where you (and other signed-in users) can record voice, get it transcribed by AI, refine into a polished email draft, and save it directly to your own Gmail Drafts folder.
+## What gets built
 
-Each user connects their own Google account, so drafts always land in the right inbox.
+### 1. Storage + database
 
-## What you'll see
+- **New storage bucket** `telegram-images` (private). Images are served via short-lived signed URLs.
+- **New table** `public.images` with the user-facing fields: `storage_path`, `caption`, `width`, `height`, `mime_type`, `size_bytes`, `source` (defaults to `'telegram'`), `telegram_message_id`. RLS scoped to `auth.uid()`; service role grant so the Telegram webhook can insert.
 
-1. A new **Login / Sign up** landing page (email + password, plus Google sign-in for one-click access).
-2. After signing in, the existing Personal OS appears — now personalised per user.
-3. A new **Email** item in the sidebar opens a page with:
-   - A "Connect Gmail" button (only shown until you've connected).
-   - A big mic button to record your message.
-   - Live transcription as you speak.
-   - A "Polish with AI" step that turns rambling speech into a proper email (subject + body + recipient).
-   - "Save to Gmail Drafts" button — opens in your Gmail Drafts folder, ready to review/send.
-   - A list of recently created drafts for reference.
+### 2. Telegram webhook update (`supabase/functions/telegram-webhook/index.ts`)
 
-## Do you need to set up the Google Console?
+- Detect `message.photo[]` (and `message.document` when it's an image mime type).
+- Pick the largest photo size, download via the existing `getFile` + `https://api.telegram.org/file/...` flow, upload to the `telegram-images` bucket under `{owner_id}/{uuid}.{ext}`, and insert a row into `public.images` (caption = `message.caption`).
+- Reply on Telegram: `📸 Saved to Images.`
+- Photos do not run through the voice/text classifier, so nothing else fires.
 
-**No.** Lovable's connector system handles the Google OAuth credentials behind the scenes. Each user just clicks "Connect Gmail" and authorises access in a popup — no API keys, no Cloud Console, no developer setup on your end.
+### 3. New Images page (`src/routes/images.tsx`)
 
-## Technical breakdown
+- Route `/images`, added to the sidebar with an `ImageIcon` between existing menu items.
+- Grid of thumbnails (signed URL, 1‑hour expiry, refreshed via React Query).
+- Each tile shows caption + relative date, with an overlay action bar:
+  - **X** delete (confirm, removes storage object + row)
+  - **Share** (Web Share API with file; falls back to copying signed URL)
+  - **Print** (opens print dialog with the image)
+  - **Save as PDF** (renders image into a one-page PDF client-side via `jspdf` and triggers download)
+  - **Attach to email** (see step 4)
+- Click a tile to open a lightbox preview.
+- Realtime: subscribes to `images` inserts so new Telegram photos appear instantly.
 
-**Authentication**
-- Enable Supabase email/password auth + Google sign-in (Lovable-managed, no setup).
-- Add `/login` and `/signup` routes; wrap protected pages in an `_authenticated` layout that redirects unauthenticated users.
-- Add a `profiles` table keyed to `auth.users` (display name, avatar, plus a `gmail_connection_id` column to remember each user's Gmail link).
-- The existing `useUserName` hook gets backed by the profile row instead of localStorage (still defaults to "Carl" for you).
+### 4. Attach to drafted email (`src/routes/email.tsx` + draft model)
 
-**Per-user Gmail connection**
-- Use Lovable's **App User Connector** flow for `google_mail`:
-  - Server function `startGmailConnect` → returns an authorisation URL (popup mode).
-  - Client helper opens the Google consent popup.
-  - On success, a server function persists the returned `connection_id` to `profiles.gmail_connection_id`.
-- Requests `gmail.compose` scope (sufficient for creating drafts).
-
-**Voice → AI → Draft pipeline**
-- Frontend records audio via `MediaRecorder`.
-- Server function `transcribeAudio` → sends the audio to Lovable AI Gateway (Whisper-compatible model) and returns the transcript.
-- Server function `polishToEmail` → uses Lovable AI (Gemini Flash) with a structured prompt to extract `{ to, subject, body }` from the transcript.
-- Server function `createGmailDraft` → uses `callAsAppUser` against `google_mail` gateway path `/gmail/v1/users/me/drafts` with the user's `connection_id` to create the draft. RFC 2822 message is base64url-encoded.
-- A `drafts_log` table records each created draft (id, subject, recipient, created_at) so the Email page can show history.
-
-**Files added/changed**
-- `src/routes/login.tsx`, `src/routes/signup.tsx`, `src/routes/_authenticated.tsx` (layout guard)
-- Move existing pages under `_authenticated` so they require login
-- `src/routes/_authenticated/email.tsx` (the new Email page)
-- `src/integrations/lovable/appUserConnector.ts` + `appUserConnectorClient.ts` (Lovable helpers)
-- `src/lib/email.functions.ts` (server functions: connect, transcribe, polish, draft)
-- `src/components/AppSidebar.tsx` — add "Email" item with `Mail` icon
-- `src/hooks/useUserName.ts` — read/write from `profiles` instead of localStorage
-- Migration: `profiles` table + `drafts_log` table with RLS
+- "Attach to email" on the Images page stashes the selected image id(s) in `sessionStorage` (`email-attachments`) and navigates to `/email`.
+- Compose page reads them on mount, shows a small **Attachments** strip under the Body field with thumbnails and an X to remove individual attachments.
+- `createGmailDraft` server fn (`src/lib/email.functions.ts`) extended to accept `attachmentIds: string[]`. The server fn loads each image from storage (admin client) and builds a proper multipart/related RFC 2822 message before saving via the Gmail Drafts API. The `drafts_log` row also records the attachment ids in `metadata`.
+- Existing voice/polish flow is untouched; attachments are independent of body content.
 
 ## Out of scope
 
-- Sending emails directly (drafts only — you review/send from Gmail).
-- Reading inbox / replying to threads.
-- Calendar and Drive integration (you mentioned them — happy to add as a follow-up; this plan keeps Gmail isolated so it ships clean).
+- Sharing directly to specific social networks (Instagram, X, etc.) — the Web Share API hands off to whichever apps the user has installed, which is the standard browser pattern.
+- Editing/cropping images.
+- Bulk select / multi-delete (single-image actions only for v1).
 
-Ready to build when you approve.
+## Technical notes
+
+- New npm dep: `jspdf` (client-side, for the Save-as-PDF action).
+- Image MIME limited to `image/jpeg | image/png | image/webp | image/gif`; oversized (>15 MB) photos are rejected by the webhook with a Telegram reply.
+- Signed URLs cached in React Query for 50 min (under the 60 min expiry).
+- Gmail draft attachments use base64 encoding inside `multipart/related`; total raw size capped at ~25 MB to stay within Gmail's limit.
