@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Mic, MicOff, Sparkles, Send, Mail, ExternalLink } from "lucide-react";
+import { Mic, MicOff, Sparkles, Send, Mail, ExternalLink, Paperclip, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   transcribeAudio,
@@ -16,6 +16,7 @@ import {
   listRecentDrafts,
   lookupRecipient,
 } from "@/lib/email.functions";
+import { getImagesForAttach } from "@/lib/images.functions";
 
 export const Route = createFileRoute("/email")({
   head: () => ({ meta: [{ title: "Email — Voice Drafts" }] }),
@@ -29,6 +30,7 @@ function EmailPage() {
   const createDraft = useServerFn(createGmailDraft);
   const listDrafts = useServerFn(listRecentDrafts);
   const lookup = useServerFn(lookupRecipient);
+  const getAtts = useServerFn(getImagesForAttach);
 
   const draftsQ = useQuery({ queryKey: ["recent-drafts"], queryFn: () => listDrafts() });
 
@@ -40,6 +42,7 @@ function EmailPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<Array<{ name: string; email: string }>>([]);
   const [showSuggest, setShowSuggest] = useState(false);
+  const [attachments, setAttachments] = useState<Array<{ id: string; signed_url: string; caption: string | null; mime_type: string }>>([]);
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const lookupTimer = useRef<number | null>(null);
@@ -57,6 +60,21 @@ function EmailPage() {
       toast.success("Loaded email details from meeting");
     } catch {}
   }, []);
+
+  // Load attachments queued from Images page
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("email-attachments");
+      if (!raw) return;
+      sessionStorage.removeItem("email-attachments");
+      const ids = JSON.parse(raw) as string[];
+      if (!Array.isArray(ids) || ids.length === 0) return;
+      getAtts({ data: { ids } }).then((res) => {
+        setAttachments(res);
+        toast.success(`${res.length} image${res.length > 1 ? "s" : ""} attached`);
+      }).catch(() => toast.error("Couldn't load attachments"));
+    } catch {}
+  }, [getAtts]);
 
   // Debounced recipient lookup
   useEffect(() => {
@@ -135,8 +153,14 @@ function EmailPage() {
   };
 
   const handleSaveDraft = useMutation({
-    mutationFn: () => createDraft({ data: { to, subject, body } }),
+    mutationFn: () => createDraft({ data: { to, subject, body, attachmentIds: attachments.map((a) => a.id) } }),
     onSuccess: () => {
+      toast.success("Draft saved to Gmail");
+      qc.invalidateQueries({ queryKey: ["recent-drafts"] });
+      setTranscript(""); setTo(""); setSubject(""); setBody(""); setAttachments([]);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
       toast.success("Draft saved to Gmail");
       qc.invalidateQueries({ queryKey: ["recent-drafts"] });
       setTranscript(""); setTo(""); setSubject(""); setBody("");
