@@ -101,13 +101,20 @@ function base64url(input: string): string {
   return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
+function chunkBase64(b64: string, width = 76): string {
+  const parts: string[] = [];
+  for (let i = 0; i < b64.length; i += width) parts.push(b64.slice(i, i + width));
+  return parts.join("\r\n");
+}
+
 export const createGmailDraft = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { to: string; subject: string; body: string }) =>
+  .inputValidator((input: { to: string; subject: string; body: string; attachmentIds?: string[] }) =>
     z.object({
       to: z.string().max(500),
       subject: z.string().min(1).max(998),
       body: z.string().min(1).max(50_000),
+      attachmentIds: z.array(z.string().uuid()).max(10).optional(),
     }).parse(input),
   )
   .handler(async ({ data, context }) => {
@@ -117,13 +124,64 @@ export const createGmailDraft = createServerFn({ method: "POST" })
     if (!lovableKey) throw new Error("LOVABLE_API_KEY is not configured.");
     if (!gmailKey) throw new Error("Gmail connector is not linked.");
 
-    const rfc2822 = [
-      data.to ? `To: ${data.to}` : "",
-      `Subject: ${data.subject}`,
-      'Content-Type: text/plain; charset="UTF-8"',
-      "",
-      data.body,
-    ].filter(Boolean).join("\r\n");
+    // Load any attachments
+    type Att = { filename: string; mime: string; b64: string };
+    const attachments: Att[] = [];
+    const ids = data.attachmentIds ?? [];
+    if (ids.length > 0) {
+      const { data: rows, error } = await supabase
+        .from("images")
+        .select("id, storage_path, mime_type")
+        .in("id", ids)
+        .eq("user_id", userId);
+      if (error) throw new Error(error.message);
+      const list = (rows ?? []) as Array<{ id: string; storage_path: string; mime_type: string | null }>;
+      for (const r of list) {
+        const { data: file, error: dErr } = await supabase.storage.from("telegram-images").download(r.storage_path);
+        if (dErr || !file) throw new Error(`Couldn't load attachment: ${dErr?.message ?? "unknown"}`);
+        const buf = Buffer.from(await file.arrayBuffer());
+        if (buf.byteLength > 20 * 1024 * 1024) throw new Error("Attachment over 20 MB");
+        const filename = r.storage_path.split("/").pop() || `image-${r.id}.jpg`;
+        attachments.push({ filename, mime: r.mime_type ?? "image/jpeg", b64: buf.toString("base64") });
+      }
+    }
+
+    let raw: string;
+    if (attachments.length === 0) {
+      raw = [
+        data.to ? `To: ${data.to}` : "",
+        `Subject: ${data.subject}`,
+        "MIME-Version: 1.0",
+        'Content-Type: text/plain; charset="UTF-8"',
+        "",
+        data.body,
+      ].filter(Boolean).join("\r\n");
+    } else {
+      const boundary = `bnd_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`;
+      const lines: string[] = [];
+      if (data.to) lines.push(`To: ${data.to}`);
+      lines.push(`Subject: ${data.subject}`);
+      lines.push("MIME-Version: 1.0");
+      lines.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
+      lines.push("");
+      lines.push(`--${boundary}`);
+      lines.push('Content-Type: text/plain; charset="UTF-8"');
+      lines.push("Content-Transfer-Encoding: 7bit");
+      lines.push("");
+      lines.push(data.body);
+      for (const a of attachments) {
+        lines.push(`--${boundary}`);
+        lines.push(`Content-Type: ${a.mime}; name="${a.filename}"`);
+        lines.push(`Content-Disposition: attachment; filename="${a.filename}"`);
+        lines.push("Content-Transfer-Encoding: base64");
+        lines.push("");
+        lines.push(chunkBase64(a.b64));
+      }
+      lines.push(`--${boundary}--`);
+      raw = lines.join("\r\n");
+    }
+
+    const rawB64 = Buffer.from(raw, "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
     const res = await fetch(`${GATEWAY_BASE_URL}/google_mail/gmail/v1/users/me/drafts`, {
       method: "POST",
@@ -132,7 +190,7 @@ export const createGmailDraft = createServerFn({ method: "POST" })
         "X-Connection-Api-Key": gmailKey,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ message: { raw: base64url(rfc2822) } }),
+      body: JSON.stringify({ message: { raw: rawB64 } }),
     });
     if (!res.ok) {
       const text = await res.text();
@@ -148,7 +206,7 @@ export const createGmailDraft = createServerFn({ method: "POST" })
       body_preview: data.body.slice(0, 200),
     });
 
-    return { draftId: draft.id ?? "" };
+    return { draftId: draft.id ?? "", attachmentCount: attachments.length };
   });
 
 // ---- List recent drafts ----

@@ -21,6 +21,7 @@ const items = [
   { title: "Diary",     subtitle: "Notes & reflections",        url: "/diary",    emoji: "📓", tint: "from-rose-200 to-rose-300" },
   { title: "Meetings",  subtitle: "Calendar & agenda",          url: "/meetings", emoji: "📅", tint: "from-violet-200 to-violet-300" },
   { title: "Email",     subtitle: "Voice → Gmail drafts",       url: "/email",    emoji: "✉️", tint: "from-pink-200 to-rose-300" },
+  { title: "Images",    subtitle: "Photos from Telegram",       url: "/images",   emoji: "🖼️", tint: "from-cyan-200 to-teal-300" },
   { title: "About Me",  subtitle: "Profile & memory",           url: "/about",    emoji: "🧠", tint: "from-fuchsia-200 to-pink-300" },
   { title: "Schedules", subtitle: "Recurring AI briefings",      url: "/schedules", emoji: "⏰", tint: "from-indigo-200 to-blue-300" },
   { title: "Settings",  subtitle: "Telegram & birthdays",       url: "/settings", emoji: "⚙️", tint: "from-slate-200 to-slate-300" },

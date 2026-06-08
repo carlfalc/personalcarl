@@ -21,6 +21,7 @@ import { Route as EmailRouteImport } from './routes/email'
 import { Route as DiaryRouteImport } from './routes/diary'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedImagesRouteImport } from './routes/_authenticated/images'
 
 const TodosRoute = TodosRouteImport.update({
   id: '/todos',
@@ -82,6 +83,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedImagesRoute = AuthenticatedImagesRouteImport.update({
+  id: '/_authenticated/images',
+  path: '/images',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -96,6 +102,7 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/tasks': typeof TasksRoute
   '/todos': typeof TodosRoute
+  '/images': typeof AuthenticatedImagesRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -110,6 +117,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/tasks': typeof TasksRoute
   '/todos': typeof TodosRoute
+  '/images': typeof AuthenticatedImagesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -125,6 +133,7 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/tasks': typeof TasksRoute
   '/todos': typeof TodosRoute
+  '/_authenticated/images': typeof AuthenticatedImagesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -141,6 +150,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/tasks'
     | '/todos'
+    | '/images'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -155,6 +165,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/tasks'
     | '/todos'
+    | '/images'
   id:
     | '__root__'
     | '/'
@@ -169,6 +180,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/tasks'
     | '/todos'
+    | '/_authenticated/images'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -184,6 +196,7 @@ export interface RootRouteChildren {
   SignupRoute: typeof SignupRoute
   TasksRoute: typeof TasksRoute
   TodosRoute: typeof TodosRoute
+  AuthenticatedImagesRoute: typeof AuthenticatedImagesRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -272,6 +285,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/images': {
+      id: '/_authenticated/images'
+      path: '/images'
+      fullPath: '/images'
+      preLoaderRoute: typeof AuthenticatedImagesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -288,7 +308,18 @@ const rootRouteChildren: RootRouteChildren = {
   SignupRoute: SignupRoute,
   TasksRoute: TasksRoute,
   TodosRoute: TodosRoute,
+  AuthenticatedImagesRoute: AuthenticatedImagesRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
