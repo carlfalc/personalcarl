@@ -11,7 +11,7 @@ import { Card } from "@/components/ui/card";
 import { listImages, deleteImage, type ImageRow } from "@/lib/images.functions";
 import { supabase } from "@/integrations/supabase/client";
 
-export const Route = createFileRoute("/_authenticated/images")({
+export const Route = createFileRoute("/images")({
   head: () => ({ meta: [{ title: "Images — Personal OS" }] }),
   component: ImagesPage,
 });
