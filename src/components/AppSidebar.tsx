@@ -133,9 +133,16 @@ export function AppSidebar() {
                         >
                           {item.emoji}
                         </span>
-                        <span className="flex flex-col items-start leading-tight group-data-[collapsible=icon]:hidden">
-                          <span className="text-sm font-semibold text-foreground">
-                            {item.title}
+                        <span className="flex min-w-0 flex-1 flex-col items-start leading-tight group-data-[collapsible=icon]:hidden">
+                          <span className="flex w-full items-center gap-1.5">
+                            <span className="text-sm font-semibold text-foreground">
+                              {item.title}
+                            </span>
+                            {item.countKey && item.countColor && counts && counts[item.countKey] > 0 && (
+                              <span className={cn("text-xs font-bold tabular-nums", COUNT_COLOR_CLASS[item.countColor])}>
+                                {counts[item.countKey]}
+                              </span>
+                            )}
                           </span>
                           <span className="text-[11px] text-muted-foreground">
                             {item.subtitle}
