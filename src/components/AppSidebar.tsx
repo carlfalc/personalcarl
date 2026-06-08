@@ -78,6 +78,7 @@ export function AppSidebar() {
   const currentPath = useRouterState({ select: (s) => s.location.pathname });
   const [userName] = useUserName();
   const avatarUrl = useAvatar();
+  const { data: counts } = useSidebarCounts();
 
 
   return (
