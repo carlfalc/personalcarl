@@ -1,4 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import {
   Sidebar,
   SidebarContent,
@@ -12,25 +13,72 @@ import {
 import { cn } from "@/lib/utils";
 import { useUserName } from "@/hooks/useUserName";
 import { useAvatar } from "@/hooks/useAvatar";
+import { supabase } from "@/integrations/supabase/client";
+import { useRealtimeTable } from "@/hooks/useRealtimeTable";
 
-const items = [
+type CountKey = "tasks" | "ideas" | "todos" | "meetings" | "images";
+type CountColor = "red" | "green" | "black";
+
+const items: Array<{
+  title: string; subtitle: string; url: string; emoji: string; tint: string;
+  countKey?: CountKey; countColor?: CountColor;
+}> = [
   { title: "Today",     subtitle: "Day at a glance",            url: "/",         emoji: "☀️", tint: "from-amber-200 to-orange-300" },
-  { title: "Tasks",     subtitle: "Things to do",               url: "/tasks",    emoji: "✅", tint: "from-emerald-200 to-emerald-300" },
-  { title: "Ideas",     subtitle: "Capture & explore",          url: "/ideas",    emoji: "💡", tint: "from-yellow-200 to-amber-300" },
-  { title: "To-Dos",    subtitle: "Quick lists",                url: "/todos",    emoji: "📋", tint: "from-sky-200 to-sky-300" },
+  { title: "Tasks",     subtitle: "Things to do",               url: "/tasks",    emoji: "✅", tint: "from-emerald-200 to-emerald-300", countKey: "tasks",    countColor: "red" },
+  { title: "Ideas",     subtitle: "Capture & explore",          url: "/ideas",    emoji: "💡", tint: "from-yellow-200 to-amber-300",    countKey: "ideas",    countColor: "green" },
+  { title: "To-Dos",    subtitle: "Quick lists",                url: "/todos",    emoji: "📋", tint: "from-sky-200 to-sky-300",         countKey: "todos",    countColor: "red" },
   { title: "Diary",     subtitle: "Notes & reflections",        url: "/diary",    emoji: "📓", tint: "from-rose-200 to-rose-300" },
-  { title: "Meetings",  subtitle: "Calendar & agenda",          url: "/meetings", emoji: "📅", tint: "from-violet-200 to-violet-300" },
+  { title: "Meetings",  subtitle: "Calendar & agenda",          url: "/meetings", emoji: "📅", tint: "from-violet-200 to-violet-300",   countKey: "meetings", countColor: "red" },
   { title: "Email",     subtitle: "Voice → Gmail drafts",       url: "/email",    emoji: "✉️", tint: "from-pink-200 to-rose-300" },
-  { title: "Images",    subtitle: "Photos from Telegram",       url: "/images",   emoji: "🖼️", tint: "from-cyan-200 to-teal-300" },
+  { title: "Images",    subtitle: "Photos from Telegram",       url: "/images",   emoji: "🖼️", tint: "from-cyan-200 to-teal-300",       countKey: "images",   countColor: "black" },
   { title: "About Me",  subtitle: "Profile & memory",           url: "/about",    emoji: "🧠", tint: "from-fuchsia-200 to-pink-300" },
   { title: "Schedules", subtitle: "Recurring AI briefings",      url: "/schedules", emoji: "⏰", tint: "from-indigo-200 to-blue-300" },
   { title: "Settings",  subtitle: "Telegram & birthdays",       url: "/settings", emoji: "⚙️", tint: "from-slate-200 to-slate-300" },
 ];
 
+const COUNT_COLOR_CLASS: Record<CountColor, string> = {
+  red: "text-red-600",
+  green: "text-emerald-600",
+  black: "text-foreground",
+};
+
+function useSidebarCounts() {
+  useRealtimeTable("entries", ["sidebar-counts"]);
+  useRealtimeTable("meetings", ["sidebar-counts"]);
+  useRealtimeTable("images", ["sidebar-counts"]);
+
+  return useQuery({
+    queryKey: ["sidebar-counts"],
+    queryFn: async (): Promise<Record<CountKey, number>> => {
+      const nowIso = new Date().toISOString();
+      const [tasks, ideas, todos, meetings, images] = await Promise.all([
+        supabase.from("entries").select("id", { count: "exact", head: true })
+          .eq("type", "task").not("status", "in", "(done,deleted)"),
+        supabase.from("entries").select("id", { count: "exact", head: true })
+          .eq("type", "idea").neq("status", "deleted"),
+        supabase.from("entries").select("id", { count: "exact", head: true })
+          .eq("type", "todo").neq("status", "done"),
+        supabase.from("meetings").select("id", { count: "exact", head: true })
+          .neq("status", "cancelled").gte("datetime", nowIso),
+        supabase.from("images").select("id", { count: "exact", head: true }),
+      ]);
+      return {
+        tasks: tasks.count ?? 0,
+        ideas: ideas.count ?? 0,
+        todos: todos.count ?? 0,
+        meetings: meetings.count ?? 0,
+        images: images.count ?? 0,
+      };
+    },
+    staleTime: 15_000,
+  });
+}
+
 export function AppSidebar() {
   const currentPath = useRouterState({ select: (s) => s.location.pathname });
   const [userName] = useUserName();
   const avatarUrl = useAvatar();
+  const { data: counts } = useSidebarCounts();
 
 
   return (
@@ -85,9 +133,16 @@ export function AppSidebar() {
                         >
                           {item.emoji}
                         </span>
-                        <span className="flex flex-col items-start leading-tight group-data-[collapsible=icon]:hidden">
-                          <span className="text-sm font-semibold text-foreground">
-                            {item.title}
+                        <span className="flex min-w-0 flex-1 flex-col items-start leading-tight group-data-[collapsible=icon]:hidden">
+                          <span className="flex w-full items-center gap-1.5">
+                            <span className="text-sm font-semibold text-foreground">
+                              {item.title}
+                            </span>
+                            {item.countKey && item.countColor && counts && counts[item.countKey] > 0 && (
+                              <span className={cn("text-xs font-bold tabular-nums", COUNT_COLOR_CLASS[item.countColor])}>
+                                {counts[item.countKey]}
+                              </span>
+                            )}
                           </span>
                           <span className="text-[11px] text-muted-foreground">
                             {item.subtitle}
