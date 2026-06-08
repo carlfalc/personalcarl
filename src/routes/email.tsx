@@ -255,6 +255,26 @@ function EmailPage() {
               <Label htmlFor="body">Body</Label>
               <Textarea id="body" value={body} onChange={(e) => setBody(e.target.value)} rows={8} />
             </div>
+            {attachments.length > 0 && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1"><Paperclip className="h-3.5 w-3.5" /> Attachments ({attachments.length})</Label>
+                <div className="flex flex-wrap gap-2">
+                  {attachments.map((a) => (
+                    <div key={a.id} className="relative group">
+                      <img src={a.signed_url} alt={a.caption ?? ""} className="h-16 w-16 rounded-md object-cover border" />
+                      <button
+                        type="button"
+                        onClick={() => setAttachments((prev) => prev.filter((x) => x.id !== a.id))}
+                        className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-black/70 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-red-500"
+                        aria-label="Remove"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <Button
               className="w-full"
               onClick={() => handleSaveDraft.mutate()}
