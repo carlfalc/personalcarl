@@ -257,6 +257,29 @@ function TodayPage() {
     .filter((m) => m.status !== "cancelled" && new Date(m.datetime).getTime() >= Date.now() - 60 * 60 * 1000)
     .slice(0, 5);
 
+  // ---- Quick stats ----
+  const openTasks = entries.filter((e) =>
+    e.type === "task" && e.status !== "done" && e.status !== "deleted" &&
+    (!e.due_date || e.due_date <= today),
+  );
+  const doneToday = entries.filter((e) => {
+    if (e.type !== "task" || e.status !== "done") return false;
+    return e.created_at?.slice(0, 10) === today;
+  }).length;
+  const overdueCount = entries.filter((e) =>
+    e.type === "task" && e.status !== "done" && e.status !== "deleted" &&
+    !!e.due_date && e.due_date < today,
+  ).length;
+  const activeMeetings = meetings.filter((m) => m.status !== "cancelled");
+  const meetingsToday = activeMeetings.filter(
+    (m) => new Date(m.datetime).toISOString().slice(0, 10) === today,
+  ).length;
+  const weekEnd = addDays(new Date(), 7).getTime();
+  const meetingsThisWeek = activeMeetings.filter((m) => {
+    const t = new Date(m.datetime).getTime();
+    return t >= Date.now() - 60 * 60 * 1000 && t <= weekEnd;
+  }).length;
+
   const tiles: Record<string, React.ReactNode> = {
     tasks: (
       <Panel title="Today's Tasks" emoji="✅" href="/tasks" addHref="/tasks">
