@@ -1,0 +1,1 @@
+UPDATE public.profiles SET telegram_chat_id = '6824076380' WHERE id = '76a50751-76c1-4d1d-b23e-14b28dfa0a04' AND (telegram_chat_id IS NULL OR telegram_chat_id = '');
