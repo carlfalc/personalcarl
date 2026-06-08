@@ -1,17 +1,44 @@
 import { addDays, format, isSameDay, startOfDay } from "date-fns";
+import { Link } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+
+type Meeting = {
+  id: string;
+  title: string;
+  datetime: string;
+  status: string | null;
+};
 
 export function WeekStrip() {
   const today = startOfDay(new Date());
   const days = Array.from({ length: 7 }, (_, i) => addDays(today, i));
+  const endIso = addDays(today, 7).toISOString();
+
+  const { data: meetings = [] } = useQuery({
+    queryKey: ["today-meetings"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("meetings")
+        .select("id,title,datetime,status")
+        .gte("datetime", today.toISOString())
+        .lt("datetime", endIso)
+        .order("datetime", { ascending: true });
+      if (error) throw error;
+      return (data as Meeting[]).filter((m) => m.status !== "cancelled");
+    },
+  });
 
   return (
     <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-7">
       {days.map((d) => {
         const active = isSameDay(d, today);
+        const dayMeetings = meetings.filter((m) => isSameDay(new Date(m.datetime), d));
         return (
-          <div
+          <Link
             key={d.toISOString()}
+            to="/meetings"
             className={cn(
               "relative flex h-24 flex-col justify-between rounded-2xl border bg-card p-3 shadow-sm transition",
               active
@@ -30,8 +57,30 @@ export function WeekStrip() {
                 {format(d, "d")}
               </span>
             </div>
-            <div className="text-xs text-muted-foreground/70">—</div>
-          </div>
+            {dayMeetings.length === 0 ? (
+              <div className="text-xs text-muted-foreground/70">—</div>
+            ) : (
+              <div className="space-y-0.5 overflow-hidden">
+                {dayMeetings.slice(0, 2).map((m) => (
+                  <div
+                    key={m.id}
+                    className="truncate text-[10px] font-medium text-foreground/80"
+                    title={`${format(new Date(m.datetime), "HH:mm")} · ${m.title}`}
+                  >
+                    <span className="tabular-nums text-orange-accent">
+                      {format(new Date(m.datetime), "HH:mm")}
+                    </span>{" "}
+                    {m.title}
+                  </div>
+                ))}
+                {dayMeetings.length > 2 && (
+                  <div className="text-[10px] text-muted-foreground">
+                    +{dayMeetings.length - 2} more
+                  </div>
+                )}
+              </div>
+            )}
+          </Link>
         );
       })}
     </div>
