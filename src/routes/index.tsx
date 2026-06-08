@@ -257,6 +257,29 @@ function TodayPage() {
     .filter((m) => m.status !== "cancelled" && new Date(m.datetime).getTime() >= Date.now() - 60 * 60 * 1000)
     .slice(0, 5);
 
+  // ---- Quick stats ----
+  const openTasks = entries.filter((e) =>
+    e.type === "task" && e.status !== "done" && e.status !== "deleted" &&
+    (!e.due_date || e.due_date <= today),
+  );
+  const doneToday = entries.filter((e) => {
+    if (e.type !== "task" || e.status !== "done") return false;
+    return e.created_at?.slice(0, 10) === today;
+  }).length;
+  const overdueCount = entries.filter((e) =>
+    e.type === "task" && e.status !== "done" && e.status !== "deleted" &&
+    !!e.due_date && e.due_date < today,
+  ).length;
+  const activeMeetings = meetings.filter((m) => m.status !== "cancelled");
+  const meetingsToday = activeMeetings.filter(
+    (m) => new Date(m.datetime).toISOString().slice(0, 10) === today,
+  ).length;
+  const weekEnd = addDays(new Date(), 7).getTime();
+  const meetingsThisWeek = activeMeetings.filter((m) => {
+    const t = new Date(m.datetime).getTime();
+    return t >= Date.now() - 60 * 60 * 1000 && t <= weekEnd;
+  }).length;
+
   const tiles: Record<string, React.ReactNode> = {
     tasks: (
       <Panel title="Today's Tasks" emoji="✅" href="/tasks" addHref="/tasks">
@@ -309,26 +332,55 @@ function TodayPage() {
       </Panel>
     ),
     weather: (
-      <Panel title="Weather — Today" emoji="🌤️">
-        <div className="grid grid-cols-4 gap-3 sm:grid-cols-7">
-          {Array.from({ length: 7 }).map((_, i) => {
-            const d = addDays(new Date(), i);
-            const w = WEATHER[i % WEATHER.length];
-            const Icon = w.icon;
-            return (
-              <div
-                key={i}
-                className="flex flex-col items-center gap-1.5 rounded-2xl bg-gradient-to-br from-[oklch(0.96_0.04_70)] to-[oklch(0.93_0.06_60)] p-3 text-center shadow-sm"
-              >
-                <span className="text-xs font-bold text-foreground/80">{format(d, "EEE")}</span>
-                <Icon className="h-6 w-6 text-orange-accent" />
-                <span className="text-lg font-bold tabular-nums">{w.hi}°</span>
-                <span className="text-[11px] text-muted-foreground tabular-nums">{w.lo}°</span>
-              </div>
-            );
-          })}
-        </div>
-      </Panel>
+      <div className="space-y-5">
+        <Panel title="Weather — Today" emoji="🌤️">
+          <div className="grid grid-cols-4 gap-3 sm:grid-cols-7">
+            {Array.from({ length: 7 }).map((_, i) => {
+              const d = addDays(new Date(), i);
+              const w = WEATHER[i % WEATHER.length];
+              const Icon = w.icon;
+              return (
+                <div
+                  key={i}
+                  className="flex flex-col items-center gap-1.5 rounded-2xl bg-gradient-to-br from-[oklch(0.96_0.04_70)] to-[oklch(0.93_0.06_60)] p-3 text-center shadow-sm"
+                >
+                  <span className="text-xs font-bold text-foreground/80">{format(d, "EEE")}</span>
+                  <Icon className="h-6 w-6 text-orange-accent" />
+                  <span className="text-lg font-bold tabular-nums">{w.hi}°</span>
+                  <span className="text-[11px] text-muted-foreground tabular-nums">{w.lo}°</span>
+                </div>
+              );
+            })}
+          </div>
+        </Panel>
+        <Panel title="Quick Stats" emoji="📊">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Link
+              to="/tasks"
+              className="flex flex-col items-center justify-center gap-1 rounded-2xl bg-gradient-to-br from-[oklch(0.96_0.04_70)] to-[oklch(0.93_0.06_60)] p-4 text-center shadow-sm transition hover:shadow-md sm:row-span-1"
+            >
+              <span className="text-4xl font-extrabold tabular-nums text-orange-accent">{openTasks.length}</span>
+              <span className="text-xs font-semibold text-foreground/80">Open today</span>
+            </Link>
+            <div className="flex flex-col items-center justify-center gap-1 rounded-2xl bg-[oklch(0.97_0.02_120)] p-3 text-center shadow-sm">
+              <span className="text-2xl font-bold tabular-nums text-emerald-600">{doneToday}</span>
+              <span className="text-[11px] font-semibold text-muted-foreground">Done today</span>
+            </div>
+            <div className="flex flex-col items-center justify-center gap-1 rounded-2xl bg-[oklch(0.97_0.03_30)] p-3 text-center shadow-sm">
+              <span className="text-2xl font-bold tabular-nums text-rose-600">{overdueCount}</span>
+              <span className="text-[11px] font-semibold text-muted-foreground">Overdue</span>
+            </div>
+            <Link
+              to="/meetings"
+              className="flex flex-col items-center justify-center gap-0.5 rounded-2xl bg-[oklch(0.97_0.03_240)] p-3 text-center shadow-sm transition hover:shadow-md"
+            >
+              <span className="text-2xl font-bold tabular-nums text-blue-600">{meetingsToday}</span>
+              <span className="text-[11px] font-semibold text-muted-foreground">Meetings today</span>
+              <span className="text-[10px] text-muted-foreground">{meetingsThisWeek} this week</span>
+            </Link>
+          </div>
+        </Panel>
+      </div>
     ),
     meetings: (
       <Panel title="Upcoming Meetings" emoji="📅" href="/meetings" addHref="/meetings">
