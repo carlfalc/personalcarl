@@ -824,6 +824,29 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // Auto-link this chat to the (single) owner profile if not yet linked,
+    // so morning briefings & scheduled messages can reach the user.
+    try {
+      const { data: linkOwner } = await supabase
+        .from("profiles")
+        .select("id, telegram_chat_id")
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (linkOwner?.id && String(linkOwner.telegram_chat_id ?? "") !== String(chatId)) {
+        await supabase.from("profiles").update({ telegram_chat_id: String(chatId) }).eq("id", linkOwner.id);
+        await sendTelegram(chatId, "🔗 Linked this chat — you'll now receive scheduled briefings and reminders here.");
+      }
+    } catch (e) { console.error("auto-link chat_id failed", e); }
+
+    // /start — friendly welcome
+    if (/^\/start\b/i.test(transcript)) {
+      await sendTelegram(chatId, "👋 Hi! I'm your assistant. Send a voice note or text to capture tasks, meetings, ideas, or ask a question.");
+      return new Response(JSON.stringify({ ok: true, handled: "start" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
