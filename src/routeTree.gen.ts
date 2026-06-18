@@ -14,6 +14,7 @@ import { Route as TasksRouteImport } from './routes/tasks'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SchedulesRouteImport } from './routes/schedules'
+import { Route as RosterRouteImport } from './routes/roster'
 import { Route as MeetingsRouteImport } from './routes/meetings'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ImagesRouteImport } from './routes/images'
@@ -46,6 +47,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const SchedulesRoute = SchedulesRouteImport.update({
   id: '/schedules',
   path: '/schedules',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RosterRoute = RosterRouteImport.update({
+  id: '/roster',
+  path: '/roster',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MeetingsRoute = MeetingsRouteImport.update({
@@ -98,6 +104,7 @@ export interface FileRoutesByFullPath {
   '/images': typeof ImagesRoute
   '/login': typeof LoginRoute
   '/meetings': typeof MeetingsRoute
+  '/roster': typeof RosterRoute
   '/schedules': typeof SchedulesRoute
   '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
@@ -113,6 +120,7 @@ export interface FileRoutesByTo {
   '/images': typeof ImagesRoute
   '/login': typeof LoginRoute
   '/meetings': typeof MeetingsRoute
+  '/roster': typeof RosterRoute
   '/schedules': typeof SchedulesRoute
   '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
@@ -129,6 +137,7 @@ export interface FileRoutesById {
   '/images': typeof ImagesRoute
   '/login': typeof LoginRoute
   '/meetings': typeof MeetingsRoute
+  '/roster': typeof RosterRoute
   '/schedules': typeof SchedulesRoute
   '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
@@ -146,6 +155,7 @@ export interface FileRouteTypes {
     | '/images'
     | '/login'
     | '/meetings'
+    | '/roster'
     | '/schedules'
     | '/settings'
     | '/signup'
@@ -161,6 +171,7 @@ export interface FileRouteTypes {
     | '/images'
     | '/login'
     | '/meetings'
+    | '/roster'
     | '/schedules'
     | '/settings'
     | '/signup'
@@ -176,6 +187,7 @@ export interface FileRouteTypes {
     | '/images'
     | '/login'
     | '/meetings'
+    | '/roster'
     | '/schedules'
     | '/settings'
     | '/signup'
@@ -192,6 +204,7 @@ export interface RootRouteChildren {
   ImagesRoute: typeof ImagesRoute
   LoginRoute: typeof LoginRoute
   MeetingsRoute: typeof MeetingsRoute
+  RosterRoute: typeof RosterRoute
   SchedulesRoute: typeof SchedulesRoute
   SettingsRoute: typeof SettingsRoute
   SignupRoute: typeof SignupRoute
@@ -234,6 +247,13 @@ declare module '@tanstack/react-router' {
       path: '/schedules'
       fullPath: '/schedules'
       preLoaderRoute: typeof SchedulesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/roster': {
+      id: '/roster'
+      path: '/roster'
+      fullPath: '/roster'
+      preLoaderRoute: typeof RosterRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/meetings': {
@@ -304,6 +324,7 @@ const rootRouteChildren: RootRouteChildren = {
   ImagesRoute: ImagesRoute,
   LoginRoute: LoginRoute,
   MeetingsRoute: MeetingsRoute,
+  RosterRoute: RosterRoute,
   SchedulesRoute: SchedulesRoute,
   SettingsRoute: SettingsRoute,
   SignupRoute: SignupRoute,
