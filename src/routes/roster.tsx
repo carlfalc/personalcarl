@@ -20,7 +20,7 @@ type Entry = {
 };
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const STAFF = ["Jayda", "Lauren", "Abigail", "Sarah", "Izabella", "Danielle"];
+const STAFF = ["Jayda", "Lauren", "Abigail", "Sarah", "Izabella", "Danielle", "Savannah McDougall"];
 
 const INITIAL: Entry[] = [
   { staff: "Jayda", day: "Mon", off: true },
