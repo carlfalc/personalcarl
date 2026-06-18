@@ -33,6 +33,7 @@ const items: Array<{
   { title: "Images",    subtitle: "Photos from Telegram",       url: "/images",   emoji: "🖼️", tint: "from-cyan-200 to-teal-300",       countKey: "images",   countColor: "black" },
   { title: "About Me",  subtitle: "Profile & memory",           url: "/about",    emoji: "🧠", tint: "from-fuchsia-200 to-pink-300" },
   { title: "Schedules", subtitle: "Recurring AI briefings",      url: "/schedules", emoji: "⏰", tint: "from-indigo-200 to-blue-300" },
+  { title: "Roster",    subtitle: "Glasshouse weekly roster",   url: "/roster",   emoji: "🗓️", tint: "from-emerald-200 to-green-300" },
   { title: "Settings",  subtitle: "Telegram & birthdays",       url: "/settings", emoji: "⚙️", tint: "from-slate-200 to-slate-300" },
 ];
 
