@@ -64,7 +64,12 @@ const fmtHrs = (m: number) => {
   const h = m / 60;
   return h % 1 === 0 ? `${h}h` : `${h.toFixed(1)}h`;
 };
-const entryHrs = (e: Entry) => (e.off ? 0 : toMins(e.end!) - toMins(e.start!));
+const entryHrs = (e: Entry) => {
+  if (e.off) return 0;
+  let d = toMins(e.end!) - toMins(e.start!);
+  if (d < 0) d += 24 * 60; // overnight shift
+  return d;
+};
 const fmt = (t: string) => {
   const [h, m] = t.split(":").map(Number);
   const ampm = h >= 12 ? "pm" : "am";
