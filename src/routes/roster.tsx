@@ -301,6 +301,14 @@ function RosterPage() {
                 </select>
               </div>
               <div className="gh-modal-row">
+                <label>Day</label>
+                <select value={mDay} onChange={(e) => setMDay(e.target.value)}>
+                  {DAYS.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="gh-modal-row">
                 <label>Type</label>
                 <select value={mType} onChange={(e) => setMType(e.target.value as "work" | "off")}>
                   <option value="work">Working shift</option>
