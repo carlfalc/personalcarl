@@ -149,6 +149,7 @@ function RosterPage() {
   const [mode, setMode] = useState<"manager" | "staff">("manager");
   const [modal, setModal] = useState<ModalState>(null);
   const [mStaff, setMStaff] = useState("");
+  const [mDay, setMDay] = useState("Mon");
   const [mType, setMType] = useState<"work" | "off">("work");
   const [mStart, setMStart] = useState("06:00");
   const [mEnd, setMEnd] = useState("10:30");
@@ -163,6 +164,7 @@ function RosterPage() {
   const openAdd = (staff: string, day: string) => {
     setModal({ kind: "add", staff, day });
     setMStaff(staff);
+    setMDay(day);
     setMType("work");
     setMStart("06:00");
     setMEnd("10:30");
@@ -171,6 +173,7 @@ function RosterPage() {
     const e = entries[index];
     setModal({ kind: "edit", index });
     setMStaff(e.staff);
+    setMDay(e.day);
     setMType(e.off ? "off" : "work");
     setMStart(e.off ? "06:00" : e.start!);
     setMEnd(e.off ? "10:30" : e.end!);
@@ -178,11 +181,10 @@ function RosterPage() {
   const closeModal = () => setModal(null);
   const saveEntry = () => {
     if (!modal) return;
-    const day = modal.kind === "edit" ? entries[modal.index].day : modal.day;
     const e: Entry =
       mType === "off"
-        ? { staff: mStaff, day, off: true }
-        : { staff: mStaff, day, start: mStart, end: mEnd };
+        ? { staff: mStaff, day: mDay, off: true }
+        : { staff: mStaff, day: mDay, start: mStart, end: mEnd };
     if (modal.kind === "edit") {
       const next = entries.slice();
       next[modal.index] = e;
