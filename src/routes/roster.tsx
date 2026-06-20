@@ -12,6 +12,7 @@ export const Route = createFileRoute("/roster")({
   component: RosterPage,
 });
 
+type RosterType = "staff" | "manager";
 type Row = {
   id: string;
   staff_name: string;
@@ -20,8 +21,10 @@ type Row = {
   is_off: boolean;
   start_time: string | null;
   end_time: string | null;
+  roster_type: RosterType;
 };
-type Snapshot = { id: string; saved_at: string; label: string | null; data: Row[] };
+type Snapshot = { id: string; saved_at: string; label: string | null; data: Row[]; roster_type: RosterType };
+type Meta = { roster_type: RosterType; week_start_date: string | null };
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -63,9 +66,14 @@ const afterFive = (r: Row) => {
 const STYLE = `
 .gh-wrap{max-width:1080px;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#1d1d1b}
 .gh-topbar{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;border-bottom:2px solid #0d3a2c;padding-bottom:.75rem}
-.gh-brand{display:flex;align-items:baseline;gap:12px}
+.gh-brand{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
 .gh-brand h1{font-size:30px;font-weight:700;color:#0d3a2c;letter-spacing:.2px;margin:0}
 .gh-brand span{font-size:16px;color:#5b5b55}
+.gh-rtoggle{display:inline-flex;border:1px solid #C9A961;border-radius:8px;overflow:hidden;margin-left:6px}
+.gh-rtoggle button{font-size:12px;padding:7px 12px;border:0;background:#fff8e6;color:#0d3a2c;cursor:pointer;font-weight:600}
+.gh-rtoggle button.active{background:#C9A961;color:#0d3a2c}
+.gh-datepick{display:flex;align-items:center;gap:6px;margin-left:8px;font-size:12px;color:#5b5b55}
+.gh-datepick input{font-size:12px;padding:5px 7px;border:1px solid #cdcbc1;border-radius:6px;background:#fff;color:#1d1d1b}
 .gh-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .gh-seg{display:inline-flex;border:1px solid #cdcbc1;border-radius:8px;overflow:hidden}
 .gh-seg button{font-size:12px;padding:7px 12px;border:0;background:transparent;color:#5b5b55;cursor:pointer}
@@ -75,7 +83,7 @@ const STYLE = `
 .gh-tool.primary{background:#0d3a2c;color:#fff;border-color:#0d3a2c}
 .gh-tool.accent{background:#C9A961;color:#0d3a2c;border-color:#C9A961}
 .gh-grid{display:grid;grid-template-columns:120px repeat(7,1fr) 76px;gap:3px;font-size:12px}
-.gh-grid.staff{grid-template-columns:120px repeat(7,1fr)}
+.gh-grid.nototal{grid-template-columns:120px repeat(7,1fr)}
 .gh-header{font-size:11px;font-weight:600;color:#5b5b55;text-align:center;padding:6px 2px;text-transform:uppercase;letter-spacing:.3px}
 .gh-header.total-h{color:#0d3a2c}
 .gh-cell{padding:6px 4px;min-height:40px;display:flex;flex-direction:column;gap:3px}
@@ -113,7 +121,7 @@ const STYLE = `
 .gh-snap-list{display:flex;flex-direction:column;gap:6px}
 .gh-snap-row{display:flex;align-items:center;gap:8px;padding:6px 8px;background:#F7F4EC;border-radius:6px;font-size:12px}
 .gh-snap-row .when{flex:1;color:#1d1d1b;font-weight:600}
-@media print{.gh-toolbar{display:none}.gh-empty{display:none}.gh-modal-backdrop{display:none!important}.gh-snap-panel{display:none}.gh-name .xbtn{display:none}}
+@media print{.gh-toolbar{display:none}.gh-empty{display:none}.gh-modal-backdrop{display:none!important}.gh-snap-panel{display:none}.gh-name .xbtn{display:none}.gh-rtoggle{display:none}.gh-datepick input{border:0;background:transparent}}
 .gh-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;display:flex;align-items:center;justify-content:center}
 .gh-modal-card{background:#fff;border:1px solid #e3e1d8;border-radius:12px;padding:1.25rem;width:320px}
 .gh-modal-card h3{font-size:15px;font-weight:600;margin:0 0 4px}
@@ -125,7 +133,13 @@ type ModalState =
   | { kind: "addStaff" }
   | null;
 
-function buildStaffHTML(staff: string[], rows: Row[]) {
+const prettyDate = (d: string | null) => {
+  if (!d) return "";
+  const dt = new Date(d + "T00:00:00");
+  return dt.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+};
+
+function buildStaffHTML(title: string, weekDate: string | null, staff: string[], rows: Row[]) {
   let html = "";
   html += '<div class="gh-header"></div>' + DAYS.map((d) => `<div class="gh-header">${d}</div>`).join("");
   staff.forEach((person) => {
@@ -142,13 +156,16 @@ function buildStaffHTML(staff: string[], rows: Row[]) {
       html += c;
     });
   });
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Glasshouse Roster</title><style>${STYLE}</style></head><body><div class="gh-wrap"><div class="gh-topbar"><div class="gh-brand"><h1>Glasshouse</h1><span>Roster</span></div></div><div class="gh-grid staff">${html}</div></div></body></html>`;
+  const dateHtml = weekDate ? `<span>Week of ${prettyDate(weekDate)}</span>` : "";
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title><style>${STYLE}</style></head><body><div class="gh-wrap"><div class="gh-topbar"><div class="gh-brand"><h1>Glasshouse</h1><span>${title}</span>${dateHtml}</div></div><div class="gh-grid nototal">${html}</div></div></body></html>`;
 }
 
 function RosterPage() {
-  const [rows, setRows] = useState<Row[]>([]);
-  const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
+  const [allRows, setAllRows] = useState<Row[]>([]);
+  const [allSnapshots, setAllSnapshots] = useState<Snapshot[]>([]);
+  const [meta, setMeta] = useState<Record<RosterType, string | null>>({ staff: null, manager: null });
   const [loading, setLoading] = useState(true);
+  const [rosterType, setRosterType] = useState<RosterType>("staff");
   const [mode, setMode] = useState<"manager" | "staff">("manager");
   const [modal, setModal] = useState<ModalState>(null);
   const [mStaff, setMStaff] = useState("");
@@ -162,13 +179,19 @@ function RosterPage() {
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      const [a, b] = await Promise.all([
+      const [a, b, c] = await Promise.all([
         supabase.from("roster_staff").select("*").order("position").order("day"),
-        supabase.from("roster_snapshots").select("id,saved_at,label,data").order("saved_at", { ascending: false }).limit(50),
+        supabase.from("roster_snapshots").select("id,saved_at,label,data,roster_type").order("saved_at", { ascending: false }).limit(100),
+        supabase.from("roster_meta").select("roster_type,week_start_date"),
       ]);
       if (cancelled) return;
-      if (a.data) setRows(a.data as Row[]);
-      if (b.data) setSnapshots(b.data as Snapshot[]);
+      if (a.data) setAllRows(a.data as Row[]);
+      if (b.data) setAllSnapshots(b.data as Snapshot[]);
+      if (c.data) {
+        const m: Record<RosterType, string | null> = { staff: null, manager: null };
+        (c.data as Meta[]).forEach((x) => { m[x.roster_type] = x.week_start_date; });
+        setMeta(m);
+      }
       setLoading(false);
     };
     load();
@@ -176,12 +199,17 @@ function RosterPage() {
       .channel("roster-rt")
       .on("postgres_changes", { event: "*", schema: "public", table: "roster_staff" }, () => load())
       .on("postgres_changes", { event: "*", schema: "public", table: "roster_snapshots" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "roster_meta" }, () => load())
       .subscribe();
     return () => {
       cancelled = true;
       supabase.removeChannel(ch);
     };
   }, []);
+
+  const rows = useMemo(() => allRows.filter((r) => r.roster_type === rosterType), [allRows, rosterType]);
+  const snapshots = useMemo(() => allSnapshots.filter((s) => s.roster_type === rosterType), [allSnapshots, rosterType]);
+  const weekDate = meta[rosterType];
 
   const staffList = useMemo(() => {
     const map = new Map<string, number>();
@@ -195,6 +223,8 @@ function RosterPage() {
   }, [rows]);
 
   const staffView = mode === "staff";
+  // Manager roster always shows hours/totals (even in staff view); only the Staff roster hides them in staff view.
+  const showTotals = rosterType === "manager" || !staffView;
 
   const personMins = (p: string) =>
     rows.filter((r) => r.staff_name === p).reduce((a, r) => a + entryHrs(r), 0);
@@ -203,6 +233,10 @@ function RosterPage() {
 
   const dayCount = (day: string, pred: (r: Row) => boolean) =>
     new Set(rows.filter((r) => r.day === day && pred(r)).map((r) => r.staff_name)).size;
+
+  const addLabel = rosterType === "manager" ? "+ Add manager" : "+ Add staff member";
+  const titleSub = rosterType === "manager" ? "Management Roster" : "Roster";
+  const newPlaceholder = rosterType === "manager" ? "e.g. Manager name" : "e.g. Jamie Smith";
 
   // Modal helpers
   const openAdd = (staff: string, day: string) => {
@@ -234,7 +268,7 @@ function RosterPage() {
     if (modal.kind === "addStaff") {
       const name = mNewName.trim();
       if (!name) return closeModal();
-      const pos = (staffList.length ? Math.max(...rows.map((r) => r.position)) : -1) + 1;
+      const pos = (rows.length ? Math.max(...rows.map((r) => r.position)) : -1) + 1;
       await supabase.from("roster_staff").insert({
         staff_name: name,
         position: pos,
@@ -242,6 +276,7 @@ function RosterPage() {
         is_off: true,
         start_time: null,
         end_time: null,
+        roster_type: rosterType,
       });
       closeModal();
       return;
@@ -249,17 +284,11 @@ function RosterPage() {
     const pos =
       rows.find((r) => r.staff_name === mStaff)?.position ??
       (rows.length ? Math.max(...rows.map((r) => r.position)) + 1 : 0);
-    const payload: {
-      staff_name: string;
-      day: string;
-      is_off: boolean;
-      start_time: string | null;
-      end_time: string | null;
-      position: number;
-    } =
+    const base = { staff_name: mStaff, day: mDay, position: pos, roster_type: rosterType };
+    const payload =
       mType === "off"
-        ? { staff_name: mStaff, day: mDay, is_off: true, start_time: null, end_time: null, position: pos }
-        : { staff_name: mStaff, day: mDay, is_off: false, start_time: mStart, end_time: mEnd, position: pos };
+        ? { ...base, is_off: true, start_time: null, end_time: null }
+        : { ...base, is_off: false, start_time: mStart, end_time: mEnd };
     if (modal.kind === "edit") {
       await supabase.from("roster_staff").update(payload).eq("id", modal.id);
     } else {
@@ -273,21 +302,28 @@ function RosterPage() {
     closeModal();
   };
   const deleteStaff = async (name: string) => {
-    await supabase.from("roster_staff").delete().eq("staff_name", name);
+    await supabase.from("roster_staff").delete().eq("staff_name", name).eq("roster_type", rosterType);
+  };
+
+  const setWeekDate = async (d: string) => {
+    setMeta((m) => ({ ...m, [rosterType]: d || null }));
+    await supabase.from("roster_meta").upsert({ roster_type: rosterType, week_start_date: d || null, updated_at: new Date().toISOString() });
   };
 
   const saveSnapshot = async () => {
+    if (!weekDate && !confirm("No date set for this roster yet. Save anyway?")) return;
     const { data: u } = await supabase.auth.getUser();
     await supabase.from("roster_snapshots").insert({
       saved_by: u.user?.id ?? null,
-      label: null,
+      label: weekDate ? `Week of ${prettyDate(weekDate)}` : null,
       data: rows,
+      roster_type: rosterType,
     });
   };
   const loadSnapshot = async (snap: Snapshot) => {
     if (!confirm("Replace the current roster with this saved version? Current shifts will be overwritten.")) return;
-    await supabase.from("roster_staff").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-    const toInsert = snap.data.map(({ id: _id, ...rest }) => rest);
+    await supabase.from("roster_staff").delete().eq("roster_type", rosterType);
+    const toInsert = snap.data.map(({ id: _id, ...rest }) => ({ ...rest, roster_type: rosterType }));
     if (toInsert.length) await supabase.from("roster_staff").insert(toInsert);
   };
   const deleteSnapshot = async (id: string) => {
@@ -295,23 +331,25 @@ function RosterPage() {
   };
 
   const downloadStaff = () => {
-    const blob = new Blob([buildStaffHTML(staffList, rows)], { type: "text/html" });
+    const title = rosterType === "manager" ? "Management Roster" : "Roster";
+    const blob = new Blob([buildStaffHTML(title, weekDate, staffList, rows)], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "Glasshouse_Roster_Staff.html";
+    a.download = `Glasshouse_${rosterType === "manager" ? "Management" : "Staff"}_Roster.html`;
     document.body.appendChild(a);
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1500);
   };
   const shareStaff = async () => {
-    const html = buildStaffHTML(staffList, rows);
+    const title = rosterType === "manager" ? "Management Roster" : "Roster";
+    const html = buildStaffHTML(title, weekDate, staffList, rows);
     try {
-      const file = new File([html], "Glasshouse_Roster_Staff.html", { type: "text/html" });
+      const file = new File([html], `Glasshouse_${rosterType === "manager" ? "Management" : "Staff"}_Roster.html`, { type: "text/html" });
       const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean };
       if (nav.canShare && nav.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: "Glasshouse Roster", text: "Glasshouse staff roster" } as ShareData);
+        await navigator.share({ files: [file], title: `Glasshouse ${title}`, text: `Glasshouse ${title}` } as ShareData);
         return;
       }
     } catch {
@@ -327,7 +365,29 @@ function RosterPage() {
         <div className="gh-topbar">
           <div className="gh-brand">
             <h1>Glasshouse</h1>
-            <span>Roster</span>
+            <span>{titleSub}</span>
+            <div className="gh-rtoggle" role="tablist" aria-label="Roster type">
+              <button
+                className={rosterType === "staff" ? "active" : ""}
+                onClick={() => setRosterType("staff")}
+              >
+                Staff roster
+              </button>
+              <button
+                className={rosterType === "manager" ? "active" : ""}
+                onClick={() => setRosterType("manager")}
+              >
+                Manager roster
+              </button>
+            </div>
+            <label className="gh-datepick">
+              Week of
+              <input
+                type="date"
+                value={weekDate ?? ""}
+                onChange={(e) => setWeekDate(e.target.value)}
+              />
+            </label>
           </div>
           <div className="gh-toolbar">
             <div className="gh-seg">
@@ -339,7 +399,7 @@ function RosterPage() {
               </button>
             </div>
             {!staffView && (
-              <button className="gh-tool primary" onClick={openAddStaff}>+ Add staff member</button>
+              <button className="gh-tool primary" onClick={openAddStaff}>{addLabel}</button>
             )}
             {!staffView && (
               <button className="gh-tool accent" onClick={saveSnapshot}>Save roster</button>
@@ -354,12 +414,12 @@ function RosterPage() {
           <p className="gh-note">Loading roster…</p>
         ) : (
           <>
-            <div className={`gh-grid${staffView ? " staff" : ""}`}>
+            <div className={`gh-grid${showTotals ? "" : " nototal"}`}>
               <div className="gh-header" />
               {DAYS.map((d) => (
                 <div key={d} className="gh-header">{d}</div>
               ))}
-              {!staffView && <div className="gh-header total-h">Total</div>}
+              {showTotals && <div className="gh-header total-h">Total</div>}
 
               {staffList.map((person) => {
                 const mins = personMins(person);
@@ -369,6 +429,7 @@ function RosterPage() {
                     person={person}
                     mins={mins}
                     staffView={staffView}
+                    showTotals={showTotals}
                     rows={rows}
                     onAdd={openAdd}
                     onEdit={openEdit}
@@ -398,7 +459,7 @@ function RosterPage() {
               )}
             </div>
 
-            {!staffView && (
+            {showTotals && (
               <div className="gh-grandrow">
                 <span className="lbl">Total</span>
                 <span className="v">{fmtHrs(grand)}</span>
@@ -407,20 +468,27 @@ function RosterPage() {
 
             <p className="gh-note">
               {staffView
-                ? "Staff view — shift times only. This is the version shared with staff (no totals or counts shown)."
-                : "Click + to add a shift or mark a day off · Click a shift to edit or remove · × on a name removes that staff member. Changes save automatically and sync to everyone."}
+                ? rosterType === "manager"
+                  ? "Staff view (Management Roster) — shift times shown with totals."
+                  : "Staff view — shift times only. This is the version shared with staff (no totals or counts shown)."
+                : "Set the week date · Click + to add a shift or mark a day off · Click a shift to edit or remove · × on a name removes that person. Changes save automatically and sync to everyone."}
             </p>
 
             {!staffView && (
               <div className="gh-snap-panel">
-                <h3>Saved rosters</h3>
+                <h3>Saved rosters ({rosterType === "manager" ? "Management" : "Staff"})</h3>
                 {snapshots.length === 0 ? (
                   <p className="gh-note" style={{ marginTop: 0 }}>No saved rosters yet. Click "Save roster" to snapshot the current week.</p>
                 ) : (
                   <div className="gh-snap-list">
                     {snapshots.map((s) => (
                       <div key={s.id} className="gh-snap-row">
-                        <span className="when">{new Date(s.saved_at).toLocaleString()}</span>
+                        <span className="when">
+                          {s.label ?? new Date(s.saved_at).toLocaleString()}
+                          <span style={{ color: "#8d8d85", fontWeight: 400, marginLeft: 8 }}>
+                            saved {new Date(s.saved_at).toLocaleString()}
+                          </span>
+                        </span>
                         <button className="gh-btn" onClick={() => loadSnapshot(s)}>Load</button>
                         <button className="gh-btn danger" onClick={() => deleteSnapshot(s.id)}>Delete</button>
                       </div>
@@ -439,7 +507,7 @@ function RosterPage() {
             <div className="gh-modal-box">
               {modal.kind === "addStaff" ? (
                 <>
-                  <h3>Add staff member</h3>
+                  <h3>{rosterType === "manager" ? "Add manager" : "Add staff member"}</h3>
                   <div className="gh-modal-row">
                     <label>Name</label>
                     <input
@@ -447,7 +515,7 @@ function RosterPage() {
                       autoFocus
                       value={mNewName}
                       onChange={(e) => setMNewName(e.target.value)}
-                      placeholder="e.g. Jamie Smith"
+                      placeholder={newPlaceholder}
                       onKeyDown={(e) => { if (e.key === "Enter") saveEntry(); }}
                     />
                   </div>
@@ -460,7 +528,7 @@ function RosterPage() {
                 <>
                   <h3>{modal.kind === "edit" ? "Edit shift" : "Add shift"}</h3>
                   <div className="gh-modal-row">
-                    <label>Staff member</label>
+                    <label>{rosterType === "manager" ? "Manager" : "Staff member"}</label>
                     <select value={mStaff} onChange={(e) => setMStaff(e.target.value)}>
                       {staffList.map((s) => (
                         <option key={s} value={s}>{s}</option>
@@ -515,6 +583,7 @@ function RosterRow({
   person,
   mins,
   staffView,
+  showTotals,
   rows,
   onAdd,
   onEdit,
@@ -523,6 +592,7 @@ function RosterRow({
   person: string;
   mins: number;
   staffView: boolean;
+  showTotals: boolean;
   rows: Row[];
   onAdd: (staff: string, day: string) => void;
   onEdit: (id: string) => void;
@@ -576,7 +646,7 @@ function RosterRow({
           </div>
         );
       })}
-      {!staffView && (
+      {showTotals && (
         <div className="gh-cell gh-totalcell">
           <span className="v">{mins ? fmtHrs(mins) : "–"}</span>
         </div>
