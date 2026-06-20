@@ -217,6 +217,10 @@ function RosterPage() {
   const snapshots = useMemo(() => allSnapshots.filter((s) => s.roster_type === rosterType), [allSnapshots, rosterType]);
   const weekDate = meta[rosterType].date;
   const weekStartDay = meta[rosterType].day;
+  const orderedDays = useMemo(
+    () => (weekStartDay != null ? [...DAYS.slice(weekStartDay), ...DAYS.slice(0, weekStartDay)] : DAYS),
+    [weekStartDay],
+  );
 
   const staffList = useMemo(() => {
     const map = new Map<string, number>();
