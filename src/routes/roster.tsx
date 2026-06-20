@@ -185,14 +185,14 @@ function RosterPage() {
       const [a, b, c] = await Promise.all([
         supabase.from("roster_staff").select("*").order("position").order("day"),
         supabase.from("roster_snapshots").select("id,saved_at,label,data,roster_type").order("saved_at", { ascending: false }).limit(100),
-        supabase.from("roster_meta").select("roster_type,week_start_date"),
+        supabase.from("roster_meta").select("roster_type,week_start_date,week_start_day"),
       ]);
       if (cancelled) return;
       if (a.data) setAllRows(a.data as Row[]);
       if (b.data) setAllSnapshots(b.data as Snapshot[]);
       if (c.data) {
-        const m: Record<RosterType, string | null> = { staff: null, manager: null };
-        (c.data as Meta[]).forEach((x) => { m[x.roster_type] = x.week_start_date; });
+        const m: Record<RosterType, MetaVal> = { staff: { date: null, day: null }, manager: { date: null, day: null } };
+        (c.data as Meta[]).forEach((x) => { m[x.roster_type] = { date: x.week_start_date, day: x.week_start_day }; });
         setMeta(m);
       }
       setLoading(false);
