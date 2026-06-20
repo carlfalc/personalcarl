@@ -628,6 +628,7 @@ function RosterRow({
   staffView,
   showTotals,
   rows,
+  days,
   onAdd,
   onEdit,
   onDeleteStaff,
@@ -637,6 +638,7 @@ function RosterRow({
   staffView: boolean;
   showTotals: boolean;
   rows: Row[];
+  days: string[];
   onAdd: (staff: string, day: string) => void;
   onEdit: (id: string) => void;
   onDeleteStaff: (name: string) => void;
