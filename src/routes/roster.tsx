@@ -141,7 +141,7 @@ const prettyDate = (d: string | null) => {
   return dt.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 };
 
-function buildStaffHTML(title: string, weekDate: string | null, staff: string[], rows: Row[]) {
+function buildStaffHTML(title: string, weekDate: string | null, startDay: number | null, staff: string[], rows: Row[]) {
   let html = "";
   html += '<div class="gh-header"></div>' + DAYS.map((d) => `<div class="gh-header">${d}</div>`).join("");
   staff.forEach((person) => {
@@ -158,7 +158,8 @@ function buildStaffHTML(title: string, weekDate: string | null, staff: string[],
       html += c;
     });
   });
-  const dateHtml = weekDate ? `<span>Week of ${prettyDate(weekDate)}</span>` : "";
+  const abbr = startDay != null ? ` ${DAY_ABBR[startDay]}` : "";
+  const dateHtml = weekDate ? `<span>Week of${abbr} ${prettyDate(weekDate)}</span>` : (abbr ? `<span>Week of${abbr}</span>` : "");
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title><style>${STYLE}</style></head><body><div class="gh-wrap"><div class="gh-topbar"><div class="gh-brand"><h1>Glasshouse</h1><span>${title}</span>${dateHtml}</div></div><div class="gh-grid nototal">${html}</div></div></body></html>`;
 }
 
