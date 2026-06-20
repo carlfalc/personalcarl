@@ -24,9 +24,11 @@ type Row = {
   roster_type: RosterType;
 };
 type Snapshot = { id: string; saved_at: string; label: string | null; data: Row[]; roster_type: RosterType };
-type Meta = { roster_type: RosterType; week_start_date: string | null };
+type Meta = { roster_type: RosterType; week_start_date: string | null; week_start_day: number | null };
+type MetaVal = { date: string | null; day: number | null };
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAY_ABBR = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 
 const toMins = (t: string) => {
   const [h, m] = t.split(":").map(Number);
