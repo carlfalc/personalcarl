@@ -354,7 +354,7 @@ function RosterPage() {
 
   const downloadStaff = () => {
     const title = rosterType === "manager" ? "Management Roster" : "Roster";
-    const blob = new Blob([buildStaffHTML(title, weekDate, staffList, rows)], { type: "text/html" });
+    const blob = new Blob([buildStaffHTML(title, weekDate, weekStartDay, staffList, rows)], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
