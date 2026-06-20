@@ -249,7 +249,14 @@ function RosterPage() {
     const pos =
       rows.find((r) => r.staff_name === mStaff)?.position ??
       (rows.length ? Math.max(...rows.map((r) => r.position)) + 1 : 0);
-    const payload =
+    const payload: {
+      staff_name: string;
+      day: string;
+      is_off: boolean;
+      start_time: string | null;
+      end_time: string | null;
+      position: number;
+    } =
       mType === "off"
         ? { staff_name: mStaff, day: mDay, is_off: true, start_time: null, end_time: null, position: pos }
         : { staff_name: mStaff, day: mDay, is_off: false, start_time: mStart, end_time: mEnd, position: pos };
