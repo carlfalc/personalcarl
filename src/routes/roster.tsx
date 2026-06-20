@@ -75,7 +75,7 @@ const STYLE = `
 .gh-rtoggle button{font-size:12px;padding:7px 12px;border:0;background:#fff8e6;color:#0d3a2c;cursor:pointer;font-weight:600}
 .gh-rtoggle button.active{background:#C9A961;color:#0d3a2c}
 .gh-datepick{display:flex;align-items:center;gap:6px;margin-left:8px;font-size:12px;color:#5b5b55}
-.gh-datepick input{font-size:12px;padding:5px 7px;border:1px solid #cdcbc1;border-radius:6px;background:#fff;color:#1d1d1b}
+.gh-datepick input,.gh-daypick{font-size:12px;padding:5px 7px;border:1px solid #cdcbc1;border-radius:6px;background:#fff;color:#1d1d1b}
 .gh-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .gh-seg{display:inline-flex;border:1px solid #cdcbc1;border-radius:8px;overflow:hidden}
 .gh-seg button{font-size:12px;padding:7px 12px;border:0;background:transparent;color:#5b5b55;cursor:pointer}
