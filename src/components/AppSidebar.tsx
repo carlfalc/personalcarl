@@ -104,20 +104,20 @@ export function AppSidebar() {
           <Link
             to="/settings"
             title="Change profile picture"
-            className="group/avatar relative flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-orange-300 to-orange-500 text-xl shadow-sm transition hover:ring-2 hover:ring-orange-accent"
+            className="group/avatar relative flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl bg-primary text-primary-foreground shadow-sm ring-1 ring-primary/20 transition hover:ring-2 hover:ring-accent"
           >
             {avatarUrl ? (
               <img src={avatarUrl} alt={`${userName}'s avatar`} className="h-full w-full object-cover" />
             ) : (
-              <span>🧑‍🍳</span>
+              <UserCircle2 className="h-6 w-6" />
             )}
-            <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/50 text-[10px] font-semibold uppercase tracking-wide text-white opacity-0 transition group-hover/avatar:opacity-100">
+            <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-primary/70 text-[10px] font-semibold uppercase tracking-wide text-primary-foreground opacity-0 transition group-hover/avatar:opacity-100">
               Edit
             </span>
           </Link>
           <div className="flex flex-col group-data-[collapsible=icon]:hidden">
-            <span className="text-base font-bold leading-tight">{userName}'s</span>
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-orange-accent">
+            <span className="text-base font-bold leading-tight text-primary">{userName}'s</span>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-accent-foreground/80">
               Command Centre
             </span>
           </div>
@@ -126,41 +126,56 @@ export function AppSidebar() {
       <SidebarContent className="bg-sidebar">
         <SidebarGroup>
           <SidebarGroupContent>
-            <SidebarMenu className="gap-1.5">
+            <SidebarMenu className="gap-1">
               {items.map((item) => {
                 const active =
                   item.url === "/" ? currentPath === "/" : currentPath.startsWith(item.url);
+                const Icon = item.icon;
                 return (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton
                       asChild
                       isActive={active}
                       className={cn(
-                        "h-auto py-2 rounded-xl",
-                        active && "bg-white shadow-sm",
+                        "h-auto py-2 rounded-lg transition-colors",
+                        "hover:bg-secondary/60",
+                        active && "bg-primary text-primary-foreground hover:bg-primary",
                       )}
                     >
                       <Link to={item.url} className="flex items-center gap-3">
                         <span
                           className={cn(
-                            "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br text-lg shadow-sm",
-                            item.tint,
+                            "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors",
+                            active
+                              ? "bg-accent text-primary"
+                              : "bg-secondary text-primary ring-1 ring-border",
                           )}
                         >
-                          {item.emoji}
+                          <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
                         </span>
                         <span className="flex min-w-0 flex-1 flex-col items-start leading-tight group-data-[collapsible=icon]:hidden">
                           <span className="flex w-full items-center gap-1.5">
-                            <span className="text-sm font-semibold text-foreground">
+                            <span className={cn(
+                              "text-sm font-semibold",
+                              active ? "text-primary-foreground" : "text-foreground",
+                            )}>
                               {item.title}
                             </span>
                             {item.countKey && item.countColor && counts && counts[item.countKey] > 0 && (
-                              <span className={cn("text-xs font-bold tabular-nums", COUNT_COLOR_CLASS[item.countColor])}>
+                              <span className={cn(
+                                "ml-auto inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+                                active
+                                  ? "bg-accent text-primary"
+                                  : cn("bg-background ring-1 ring-border", COUNT_COLOR_CLASS[item.countColor]),
+                              )}>
                                 {counts[item.countKey]}
                               </span>
                             )}
                           </span>
-                          <span className="text-[11px] text-muted-foreground">
+                          <span className={cn(
+                            "text-[11px]",
+                            active ? "text-primary-foreground/70" : "text-muted-foreground",
+                          )}>
                             {item.subtitle}
                           </span>
                         </span>
