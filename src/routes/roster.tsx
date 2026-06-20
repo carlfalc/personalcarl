@@ -143,11 +143,12 @@ const prettyDate = (d: string | null) => {
 };
 
 function buildStaffHTML(title: string, weekDate: string | null, startDay: number | null, staff: string[], rows: Row[]) {
+  const orderedDays = startDay != null ? [...DAYS.slice(startDay), ...DAYS.slice(0, startDay)] : DAYS;
   let html = "";
-  html += '<div class="gh-header"></div>' + DAYS.map((d) => `<div class="gh-header">${d}</div>`).join("");
+  html += '<div class="gh-header"></div>' + orderedDays.map((d) => `<div class="gh-header">${d}</div>`).join("");
   staff.forEach((person) => {
     html += `<div class="gh-cell gh-namecell"><span class="gh-name">${person}</span></div>`;
-    DAYS.forEach((day) => {
+    orderedDays.forEach((day) => {
       const ce = rows.filter((e) => e.staff_name === person && e.day === day);
       let c = '<div class="gh-cell">';
       ce.forEach((e) => {
@@ -159,8 +160,9 @@ function buildStaffHTML(title: string, weekDate: string | null, startDay: number
       html += c;
     });
   });
-  const abbr = startDay != null ? ` ${DAY_ABBR[startDay]}` : "";
-  const dateHtml = weekDate ? `<span>Week of${abbr} ${prettyDate(weekDate)}</span>` : (abbr ? `<span>Week of${abbr}</span>` : "");
+  const dateHtml = weekDate
+    ? `<span>Pay week commencing ${prettyDate(weekDate)}</span>`
+    : (startDay != null ? `<span>Pay week commencing ${DAY_ABBR[startDay]}</span>` : "");
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title><style>${STYLE}</style></head><body><div class="gh-wrap"><div class="gh-topbar"><div class="gh-brand"><h1>Glasshouse</h1><span>${title}</span>${dateHtml}</div></div><div class="gh-grid nototal">${html}</div></div></body></html>`;
 }
 
