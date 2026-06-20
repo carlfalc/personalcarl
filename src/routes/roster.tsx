@@ -581,7 +581,7 @@ function RosterPage() {
                   <div className="gh-modal-row">
                     <label>Day</label>
                     <select value={mDay} onChange={(e) => setMDay(e.target.value)}>
-                      {DAYS.map((d) => (
+                      {orderedDays.map((d) => (
                         <option key={d} value={d}>{d}</option>
                       ))}
                     </select>
