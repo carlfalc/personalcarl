@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/roster")({
   head: () => ({
@@ -11,50 +12,18 @@ export const Route = createFileRoute("/roster")({
   component: RosterPage,
 });
 
-type Entry = {
-  staff: string;
+type Row = {
+  id: string;
+  staff_name: string;
+  position: number;
   day: string;
-  off?: boolean;
-  start?: string;
-  end?: string;
+  is_off: boolean;
+  start_time: string | null;
+  end_time: string | null;
 };
+type Snapshot = { id: string; saved_at: string; label: string | null; data: Row[] };
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const STAFF = ["Jayda", "Lauren", "Abigail", "Sarah", "Izabella", "Danielle", "Savannah McDougall"];
-
-const INITIAL: Entry[] = [
-  { staff: "Jayda", day: "Mon", off: true },
-  { staff: "Jayda", day: "Tue", start: "06:00", end: "10:30" },
-  { staff: "Jayda", day: "Wed", start: "06:00", end: "10:30" },
-  { staff: "Jayda", day: "Thu", start: "06:00", end: "10:30" },
-  { staff: "Jayda", day: "Fri", start: "06:00", end: "14:00" },
-  { staff: "Jayda", day: "Sat", start: "07:00", end: "15:00" },
-  { staff: "Jayda", day: "Sun", off: true },
-  { staff: "Lauren", day: "Tue", start: "15:00", end: "21:30" },
-  { staff: "Lauren", day: "Wed", start: "15:00", end: "21:30" },
-  { staff: "Lauren", day: "Fri", start: "16:00", end: "21:00" },
-  { staff: "Lauren", day: "Sat", start: "13:00", end: "20:00" },
-  { staff: "Abigail", day: "Thu", start: "16:00", end: "21:00" },
-  { staff: "Abigail", day: "Fri", start: "10:30", end: "15:00" },
-  { staff: "Abigail", day: "Sat", start: "10:30", end: "15:00" },
-  { staff: "Sarah", day: "Mon", start: "13:00", end: "21:00" },
-  { staff: "Sarah", day: "Tue", start: "13:00", end: "21:00" },
-  { staff: "Sarah", day: "Wed", start: "13:00", end: "21:00" },
-  { staff: "Sarah", day: "Thu", off: true },
-  { staff: "Sarah", day: "Fri", start: "13:00", end: "21:00" },
-  { staff: "Sarah", day: "Sat", start: "13:00", end: "21:00" },
-  { staff: "Sarah", day: "Sun", off: true },
-  { staff: "Izabella", day: "Mon", start: "07:00", end: "10:30" },
-  { staff: "Izabella", day: "Tue", start: "15:00", end: "21:30" },
-  { staff: "Izabella", day: "Thu", start: "15:00", end: "21:30" },
-  { staff: "Izabella", day: "Sat", start: "10:00", end: "18:00" },
-  { staff: "Izabella", day: "Sun", start: "07:00", end: "15:00" },
-  { staff: "Danielle", day: "Tue", start: "17:00", end: "22:00" },
-  { staff: "Danielle", day: "Wed", start: "17:00", end: "21:00" },
-  { staff: "Danielle", day: "Thu", start: "16:00", end: "21:30" },
-  { staff: "Danielle", day: "Fri", start: "16:00", end: "21:00" },
-  { staff: "Danielle", day: "Sat", start: "16:00", end: "22:00" },
-];
 
 const toMins = (t: string) => {
   const [h, m] = t.split(":").map(Number);
@@ -64,10 +33,10 @@ const fmtHrs = (m: number) => {
   const h = m / 60;
   return h % 1 === 0 ? `${h}h` : `${h.toFixed(1)}h`;
 };
-const entryHrs = (e: Entry) => {
-  if (e.off) return 0;
-  let d = toMins(e.end!) - toMins(e.start!);
-  if (d < 0) d += 24 * 60; // overnight shift
+const entryHrs = (r: Row) => {
+  if (r.is_off || !r.start_time || !r.end_time) return 0;
+  let d = toMins(r.end_time) - toMins(r.start_time);
+  if (d < 0) d += 24 * 60;
   return d;
 };
 const fmt = (t: string) => {
@@ -75,6 +44,20 @@ const fmt = (t: string) => {
   const ampm = h >= 12 ? "pm" : "am";
   const hh = h > 12 ? h - 12 : h === 0 ? 12 : h;
   return m === 0 ? `${hh}${ampm}` : `${hh}:${m.toString().padStart(2, "0")}${ampm}`;
+};
+const coversNoon = (r: Row) => {
+  if (r.is_off || !r.start_time || !r.end_time) return false;
+  const s = toMins(r.start_time);
+  let e = toMins(r.end_time);
+  if (e < s) e += 24 * 60;
+  return s <= 12 * 60 && e > 12 * 60;
+};
+const afterFive = (r: Row) => {
+  if (r.is_off || !r.start_time || !r.end_time) return false;
+  let e = toMins(r.end_time);
+  const s = toMins(r.start_time);
+  if (e < s) e += 24 * 60;
+  return e > 17 * 60;
 };
 
 const STYLE = `
@@ -90,14 +73,18 @@ const STYLE = `
 .gh-tool{font-size:12px;padding:7px 13px;border-radius:8px;border:1px solid #cdcbc1;background:transparent;color:#1d1d1b;cursor:pointer}
 .gh-tool:hover{background:#f4f3ec}
 .gh-tool.primary{background:#0d3a2c;color:#fff;border-color:#0d3a2c}
-.gh-grid{display:grid;grid-template-columns:96px repeat(7,1fr) 76px;gap:3px;font-size:12px}
-.gh-grid.staff{grid-template-columns:96px repeat(7,1fr)}
+.gh-tool.accent{background:#C9A961;color:#0d3a2c;border-color:#C9A961}
+.gh-grid{display:grid;grid-template-columns:120px repeat(7,1fr) 76px;gap:3px;font-size:12px}
+.gh-grid.staff{grid-template-columns:120px repeat(7,1fr)}
 .gh-header{font-size:11px;font-weight:600;color:#5b5b55;text-align:center;padding:6px 2px;text-transform:uppercase;letter-spacing:.3px}
 .gh-header.total-h{color:#0d3a2c}
 .gh-cell{padding:6px 4px;min-height:40px;display:flex;flex-direction:column;gap:3px}
-.gh-namecell{background:#F7F4EC;border-radius:4px;justify-content:center}
+.gh-namecell{background:#F7F4EC;border-radius:4px;justify-content:center;position:relative}
 .gh-name{font-weight:600;color:#0d3a2c;font-size:12.5px;display:flex;align-items:center;gap:6px}
-.gh-hours-badge{font-size:10px;font-weight:600;color:#8d8d85;margin-left:auto}
+.gh-name .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gh-name .xbtn{border:0;background:transparent;color:#b3261e;cursor:pointer;font-size:14px;line-height:1;padding:2px 4px;border-radius:4px}
+.gh-name .xbtn:hover{background:#fdeceb}
+.gh-hours-badge{font-size:10px;font-weight:600;color:#8d8d85}
 .gh-shift{background:#E1F5EE;color:#085041;border-radius:3px;padding:4px 6px;font-size:10px;font-weight:600;line-height:1.3;cursor:pointer;text-align:center;border:0}
 .gh-shift:hover{opacity:.85}
 .gh-off{background:#f4f3ec;color:#8d8d85;font-size:10px;font-weight:600;border-radius:3px;padding:4px 6px;text-align:center;cursor:pointer;border:0}
@@ -106,6 +93,9 @@ const STYLE = `
 .gh-empty:hover{background:#f4f3ec}
 .gh-totalcell{background:#F7F4EC;border-radius:4px;align-items:center;justify-content:center}
 .gh-totalcell .v{font-weight:700;color:#0d3a2c;font-size:13px}
+.gh-countcell{background:#fff8e6;border-radius:4px;align-items:center;justify-content:center}
+.gh-countcell .v{font-weight:700;color:#0d3a2c;font-size:13px}
+.gh-countlabel{background:#C9A961;border-radius:4px;align-items:center;justify-content:center;color:#0d3a2c;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.3px;padding:0 8px;text-align:center}
 .gh-grandrow{display:flex;align-items:center;justify-content:flex-end;gap:14px;background:#C9A961;border-radius:4px;padding:9px 14px;margin-top:3px;color:#0d3a2c}
 .gh-grandrow .lbl{font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.4px;margin-right:auto}
 .gh-grandrow .v{font-weight:700;font-size:16px}
@@ -118,39 +108,47 @@ const STYLE = `
 .gh-btn{font-size:12px;padding:7px 14px;border-radius:8px;border:1px solid #cdcbc1;background:transparent;color:#1d1d1b;cursor:pointer}
 .gh-btn.primary{background:#0d3a2c;color:#fff;border-color:#0d3a2c}
 .gh-btn.danger{background:#fdeceb;color:#b3261e;border-color:#f1c2bf}
-@media print{.gh-toolbar{display:none}.gh-empty{display:none}.gh-modal-backdrop{display:none!important}}
+.gh-snap-panel{margin-top:1.5rem;border:1px solid #e3e1d8;border-radius:8px;padding:12px}
+.gh-snap-panel h3{margin:0 0 8px;font-size:13px;font-weight:700;color:#0d3a2c;text-transform:uppercase;letter-spacing:.3px}
+.gh-snap-list{display:flex;flex-direction:column;gap:6px}
+.gh-snap-row{display:flex;align-items:center;gap:8px;padding:6px 8px;background:#F7F4EC;border-radius:6px;font-size:12px}
+.gh-snap-row .when{flex:1;color:#1d1d1b;font-weight:600}
+@media print{.gh-toolbar{display:none}.gh-empty{display:none}.gh-modal-backdrop{display:none!important}.gh-snap-panel{display:none}.gh-name .xbtn{display:none}}
 .gh-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;display:flex;align-items:center;justify-content:center}
-.gh-modal-card{background:#fff;border:1px solid #e3e1d8;border-radius:12px;padding:1.25rem;width:300px}
+.gh-modal-card{background:#fff;border:1px solid #e3e1d8;border-radius:12px;padding:1.25rem;width:320px}
 .gh-modal-card h3{font-size:15px;font-weight:600;margin:0 0 4px}
 `;
 
 type ModalState =
   | { kind: "add"; staff: string; day: string }
-  | { kind: "edit"; index: number }
+  | { kind: "edit"; id: string }
+  | { kind: "addStaff" }
   | null;
 
-function buildStaffHTML(entries: Entry[]) {
-  let rows = "";
-  rows += '<div class="gh-header"></div>' + DAYS.map((d) => `<div class="gh-header">${d}</div>`).join("");
-  STAFF.forEach((person) => {
-    rows += `<div class="gh-cell gh-namecell"><span class="gh-name">${person}</span></div>`;
+function buildStaffHTML(staff: string[], rows: Row[]) {
+  let html = "";
+  html += '<div class="gh-header"></div>' + DAYS.map((d) => `<div class="gh-header">${d}</div>`).join("");
+  staff.forEach((person) => {
+    html += `<div class="gh-cell gh-namecell"><span class="gh-name">${person}</span></div>`;
     DAYS.forEach((day) => {
-      const ce = entries.filter((e) => e.staff === person && e.day === day);
+      const ce = rows.filter((e) => e.staff_name === person && e.day === day);
       let c = '<div class="gh-cell">';
       ce.forEach((e) => {
-        c += e.off
+        c += e.is_off
           ? '<div class="gh-off">off</div>'
-          : `<div class="gh-shift">${fmt(e.start!)}\u2013${fmt(e.end!)}</div>`;
+          : `<div class="gh-shift">${fmt(e.start_time!)}\u2013${fmt(e.end_time!)}</div>`;
       });
       c += "</div>";
-      rows += c;
+      html += c;
     });
   });
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Glasshouse Roster</title><style>${STYLE}</style></head><body><div class="gh-wrap"><div class="gh-topbar"><div class="gh-brand"><h1>Glasshouse</h1><span>Roster</span></div></div><div class="gh-grid staff">${rows}</div></div></body></html>`;
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Glasshouse Roster</title><style>${STYLE}</style></head><body><div class="gh-wrap"><div class="gh-topbar"><div class="gh-brand"><h1>Glasshouse</h1><span>Roster</span></div></div><div class="gh-grid staff">${html}</div></div></body></html>`;
 }
 
 function RosterPage() {
-  const [entries, setEntries] = useState<Entry[]>(INITIAL);
+  const [rows, setRows] = useState<Row[]>([]);
+  const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
+  const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<"manager" | "staff">("manager");
   const [modal, setModal] = useState<ModalState>(null);
   const [mStaff, setMStaff] = useState("");
@@ -158,14 +156,55 @@ function RosterPage() {
   const [mType, setMType] = useState<"work" | "off">("work");
   const [mStart, setMStart] = useState("06:00");
   const [mEnd, setMEnd] = useState("10:30");
+  const [mNewName, setMNewName] = useState("");
+
+  // Load + realtime
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const [a, b] = await Promise.all([
+        supabase.from("roster_staff").select("*").order("position").order("day"),
+        supabase.from("roster_snapshots").select("id,saved_at,label,data").order("saved_at", { ascending: false }).limit(50),
+      ]);
+      if (cancelled) return;
+      if (a.data) setRows(a.data as Row[]);
+      if (b.data) setSnapshots(b.data as Snapshot[]);
+      setLoading(false);
+    };
+    load();
+    const ch = supabase
+      .channel("roster-rt")
+      .on("postgres_changes", { event: "*", schema: "public", table: "roster_staff" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "roster_snapshots" }, () => load())
+      .subscribe();
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(ch);
+    };
+  }, []);
+
+  const staffList = useMemo(() => {
+    const map = new Map<string, number>();
+    rows.forEach((r) => {
+      const cur = map.get(r.staff_name);
+      if (cur === undefined || r.position < cur) map.set(r.staff_name, r.position);
+    });
+    return Array.from(map.entries())
+      .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))
+      .map(([n]) => n);
+  }, [rows]);
 
   const staffView = mode === "staff";
 
   const personMins = (p: string) =>
-    entries.filter((e) => e.staff === p).reduce((a, e) => a + entryHrs(e), 0);
+    rows.filter((r) => r.staff_name === p).reduce((a, r) => a + entryHrs(r), 0);
 
-  const grand = useMemo(() => STAFF.reduce((a, p) => a + personMins(p), 0), [entries]);
+  const grand = useMemo(() => staffList.reduce((a, p) => a + personMins(p), 0), [rows, staffList]);
 
+  const dayCount = (day: string, pred: (r: Row) => boolean) =>
+    new Set(rows.filter((r) => r.day === day && pred(r)).map((r) => r.staff_name)).size;
+
+  // Modal helpers
   const openAdd = (staff: string, day: string) => {
     setModal({ kind: "add", staff, day });
     setMStaff(staff);
@@ -174,39 +213,82 @@ function RosterPage() {
     setMStart("06:00");
     setMEnd("10:30");
   };
-  const openEdit = (index: number) => {
-    const e = entries[index];
-    setModal({ kind: "edit", index });
-    setMStaff(e.staff);
-    setMDay(e.day);
-    setMType(e.off ? "off" : "work");
-    setMStart(e.off ? "06:00" : e.start!);
-    setMEnd(e.off ? "10:30" : e.end!);
+  const openEdit = (id: string) => {
+    const r = rows.find((x) => x.id === id);
+    if (!r) return;
+    setModal({ kind: "edit", id });
+    setMStaff(r.staff_name);
+    setMDay(r.day);
+    setMType(r.is_off ? "off" : "work");
+    setMStart(r.is_off ? "06:00" : r.start_time || "06:00");
+    setMEnd(r.is_off ? "10:30" : r.end_time || "10:30");
+  };
+  const openAddStaff = () => {
+    setMNewName("");
+    setModal({ kind: "addStaff" });
   };
   const closeModal = () => setModal(null);
-  const saveEntry = () => {
+
+  const saveEntry = async () => {
     if (!modal) return;
-    const e: Entry =
+    if (modal.kind === "addStaff") {
+      const name = mNewName.trim();
+      if (!name) return closeModal();
+      const pos = (staffList.length ? Math.max(...rows.map((r) => r.position)) : -1) + 1;
+      await supabase.from("roster_staff").insert({
+        staff_name: name,
+        position: pos,
+        day: "Mon",
+        is_off: true,
+        start_time: null,
+        end_time: null,
+      });
+      closeModal();
+      return;
+    }
+    const pos =
+      rows.find((r) => r.staff_name === mStaff)?.position ??
+      (rows.length ? Math.max(...rows.map((r) => r.position)) + 1 : 0);
+    const payload =
       mType === "off"
-        ? { staff: mStaff, day: mDay, off: true }
-        : { staff: mStaff, day: mDay, start: mStart, end: mEnd };
+        ? { staff_name: mStaff, day: mDay, is_off: true, start_time: null, end_time: null, position: pos }
+        : { staff_name: mStaff, day: mDay, is_off: false, start_time: mStart, end_time: mEnd, position: pos };
     if (modal.kind === "edit") {
-      const next = entries.slice();
-      next[modal.index] = e;
-      setEntries(next);
+      await supabase.from("roster_staff").update(payload).eq("id", modal.id);
     } else {
-      setEntries([...entries, e]);
+      await supabase.from("roster_staff").insert(payload);
     }
     closeModal();
   };
-  const deleteEntry = () => {
+  const deleteEntry = async () => {
     if (modal?.kind !== "edit") return;
-    setEntries(entries.filter((_, i) => i !== modal.index));
+    await supabase.from("roster_staff").delete().eq("id", modal.id);
     closeModal();
+  };
+  const deleteStaff = async (name: string) => {
+    await supabase.from("roster_staff").delete().eq("staff_name", name);
+  };
+
+  const saveSnapshot = async () => {
+    const { data: u } = await supabase.auth.getUser();
+    await supabase.from("roster_snapshots").insert({
+      saved_by: u.user?.id ?? null,
+      label: null,
+      data: rows,
+    });
+  };
+  const loadSnapshot = async (snap: Snapshot) => {
+    if (!confirm("Replace the current roster with this saved version? Current shifts will be overwritten.")) return;
+    await supabase.from("roster_staff").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    const toInsert = snap.data.map(({ id: _id, ...rest }) => rest);
+    if (toInsert.length) await supabase.from("roster_staff").insert(toInsert);
+  };
+  const deleteSnapshot = async (id: string) => {
+    await supabase.from("roster_snapshots").delete().eq("id", id);
   };
 
   const downloadStaff = () => {
-    const blob = new Blob([buildStaffHTML(entries)], { type: "text/html" });
+    const blob = new Blob([buildStaffHTML(staffList, rows)], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -217,7 +299,7 @@ function RosterPage() {
     setTimeout(() => URL.revokeObjectURL(url), 1500);
   };
   const shareStaff = async () => {
-    const html = buildStaffHTML(entries);
+    const html = buildStaffHTML(staffList, rows);
     try {
       const file = new File([html], "Glasshouse_Roster_Staff.html", { type: "text/html" });
       const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean };
@@ -249,96 +331,171 @@ function RosterPage() {
                 Staff view
               </button>
             </div>
+            {!staffView && (
+              <button className="gh-tool primary" onClick={openAddStaff}>+ Add staff member</button>
+            )}
+            {!staffView && (
+              <button className="gh-tool accent" onClick={saveSnapshot}>Save roster</button>
+            )}
             <button className="gh-tool" onClick={() => window.print()}>Print</button>
             <button className="gh-tool" onClick={shareStaff}>Share staff copy</button>
-            <button className="gh-tool primary" onClick={downloadStaff}>Download staff copy</button>
+            <button className="gh-tool" onClick={downloadStaff}>Download staff copy</button>
           </div>
         </div>
 
-        <div className={`gh-grid${staffView ? " staff" : ""}`}>
-          <div className="gh-header" />
-          {DAYS.map((d) => (
-            <div key={d} className="gh-header">{d}</div>
-          ))}
-          {!staffView && <div className="gh-header total-h">Total</div>}
+        {loading ? (
+          <p className="gh-note">Loading roster…</p>
+        ) : (
+          <>
+            <div className={`gh-grid${staffView ? " staff" : ""}`}>
+              <div className="gh-header" />
+              {DAYS.map((d) => (
+                <div key={d} className="gh-header">{d}</div>
+              ))}
+              {!staffView && <div className="gh-header total-h">Total</div>}
 
-          {STAFF.map((person) => {
-            const mins = personMins(person);
-            return (
-              <RosterRow
-                key={person}
-                person={person}
-                mins={mins}
-                staffView={staffView}
-                entries={entries}
-                onAdd={openAdd}
-                onEdit={openEdit}
-              />
-            );
-          })}
-        </div>
+              {staffList.map((person) => {
+                const mins = personMins(person);
+                return (
+                  <RosterRow
+                    key={person}
+                    person={person}
+                    mins={mins}
+                    staffView={staffView}
+                    rows={rows}
+                    onAdd={openAdd}
+                    onEdit={openEdit}
+                    onDeleteStaff={deleteStaff}
+                  />
+                );
+              })}
 
-        {!staffView && (
-          <div className="gh-grandrow">
-            <span className="lbl">Total</span>
-            <span className="v">{fmtHrs(grand)}</span>
-          </div>
+              {!staffView && (
+                <>
+                  <div className="gh-cell gh-countlabel">On at 12pm</div>
+                  {DAYS.map((d) => (
+                    <div key={`n-${d}`} className="gh-cell gh-countcell">
+                      <span className="v">{dayCount(d, coversNoon)}</span>
+                    </div>
+                  ))}
+                  <div className="gh-cell gh-totalcell"><span className="v">–</span></div>
+
+                  <div className="gh-cell gh-countlabel">After 5pm</div>
+                  {DAYS.map((d) => (
+                    <div key={`a-${d}`} className="gh-cell gh-countcell">
+                      <span className="v">{dayCount(d, afterFive)}</span>
+                    </div>
+                  ))}
+                  <div className="gh-cell gh-totalcell"><span className="v">–</span></div>
+                </>
+              )}
+            </div>
+
+            {!staffView && (
+              <div className="gh-grandrow">
+                <span className="lbl">Total</span>
+                <span className="v">{fmtHrs(grand)}</span>
+              </div>
+            )}
+
+            <p className="gh-note">
+              {staffView
+                ? "Staff view — shift times only. This is the version shared with staff (no totals or counts shown)."
+                : "Click + to add a shift or mark a day off · Click a shift to edit or remove · × on a name removes that staff member. Changes save automatically and sync to everyone."}
+            </p>
+
+            {!staffView && (
+              <div className="gh-snap-panel">
+                <h3>Saved rosters</h3>
+                {snapshots.length === 0 ? (
+                  <p className="gh-note" style={{ marginTop: 0 }}>No saved rosters yet. Click "Save roster" to snapshot the current week.</p>
+                ) : (
+                  <div className="gh-snap-list">
+                    {snapshots.map((s) => (
+                      <div key={s.id} className="gh-snap-row">
+                        <span className="when">{new Date(s.saved_at).toLocaleString()}</span>
+                        <button className="gh-btn" onClick={() => loadSnapshot(s)}>Load</button>
+                        <button className="gh-btn danger" onClick={() => deleteSnapshot(s.id)}>Delete</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
         )}
-
-        <p className="gh-note">
-          {staffView
-            ? "Staff view — shift times only. This is the version shared with staff (no total hours shown)."
-            : "Click + to add a shift or mark a day off · Click a shift to edit or remove. Totals update automatically."}
-        </p>
       </div>
 
       {modal && (
         <div className="gh-modal-backdrop" onClick={closeModal}>
           <div className="gh-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="gh-modal-box">
-              <h3>{modal.kind === "edit" ? "Edit shift" : "Add shift"}</h3>
-              <div className="gh-modal-row">
-                <label>Staff member</label>
-                <select value={mStaff} onChange={(e) => setMStaff(e.target.value)}>
-                  {STAFF.map((s) => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="gh-modal-row">
-                <label>Day</label>
-                <select value={mDay} onChange={(e) => setMDay(e.target.value)}>
-                  {DAYS.map((d) => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="gh-modal-row">
-                <label>Type</label>
-                <select value={mType} onChange={(e) => setMType(e.target.value as "work" | "off")}>
-                  <option value="work">Working shift</option>
-                  <option value="off">Off</option>
-                </select>
-              </div>
-              {mType === "work" && (
+              {modal.kind === "addStaff" ? (
                 <>
+                  <h3>Add staff member</h3>
                   <div className="gh-modal-row">
-                    <label>Start</label>
-                    <input type="time" value={mStart} onChange={(e) => setMStart(e.target.value)} />
+                    <label>Name</label>
+                    <input
+                      type="text"
+                      autoFocus
+                      value={mNewName}
+                      onChange={(e) => setMNewName(e.target.value)}
+                      placeholder="e.g. Jamie Smith"
+                      onKeyDown={(e) => { if (e.key === "Enter") saveEntry(); }}
+                    />
+                  </div>
+                  <div className="gh-btn-row">
+                    <button className="gh-btn" onClick={closeModal}>Cancel</button>
+                    <button className="gh-btn primary" onClick={saveEntry}>Add</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h3>{modal.kind === "edit" ? "Edit shift" : "Add shift"}</h3>
+                  <div className="gh-modal-row">
+                    <label>Staff member</label>
+                    <select value={mStaff} onChange={(e) => setMStaff(e.target.value)}>
+                      {staffList.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
                   </div>
                   <div className="gh-modal-row">
-                    <label>End</label>
-                    <input type="time" value={mEnd} onChange={(e) => setMEnd(e.target.value)} />
+                    <label>Day</label>
+                    <select value={mDay} onChange={(e) => setMDay(e.target.value)}>
+                      {DAYS.map((d) => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="gh-modal-row">
+                    <label>Type</label>
+                    <select value={mType} onChange={(e) => setMType(e.target.value as "work" | "off")}>
+                      <option value="work">Working shift</option>
+                      <option value="off">Off</option>
+                    </select>
+                  </div>
+                  {mType === "work" && (
+                    <>
+                      <div className="gh-modal-row">
+                        <label>Start</label>
+                        <input type="time" value={mStart} onChange={(e) => setMStart(e.target.value)} />
+                      </div>
+                      <div className="gh-modal-row">
+                        <label>End</label>
+                        <input type="time" value={mEnd} onChange={(e) => setMEnd(e.target.value)} />
+                      </div>
+                    </>
+                  )}
+                  <div className="gh-btn-row">
+                    <button className="gh-btn" onClick={closeModal}>Cancel</button>
+                    {modal.kind === "edit" && (
+                      <button className="gh-btn danger" onClick={deleteEntry}>Remove</button>
+                    )}
+                    <button className="gh-btn primary" onClick={saveEntry}>Save</button>
                   </div>
                 </>
               )}
-              <div className="gh-btn-row">
-                <button className="gh-btn" onClick={closeModal}>Cancel</button>
-                {modal.kind === "edit" && (
-                  <button className="gh-btn danger" onClick={deleteEntry}>Remove</button>
-                )}
-                <button className="gh-btn primary" onClick={saveEntry}>Save</button>
-              </div>
             </div>
           </div>
         </div>
@@ -351,49 +508,58 @@ function RosterRow({
   person,
   mins,
   staffView,
-  entries,
+  rows,
   onAdd,
   onEdit,
+  onDeleteStaff,
 }: {
   person: string;
   mins: number;
   staffView: boolean;
-  entries: Entry[];
+  rows: Row[];
   onAdd: (staff: string, day: string) => void;
-  onEdit: (index: number) => void;
+  onEdit: (id: string) => void;
+  onDeleteStaff: (name: string) => void;
 }) {
   return (
     <>
       <div className="gh-cell gh-namecell">
         <span className="gh-name">
-          {person}
-          {!staffView && <span className="gh-hours-badge">{mins ? fmtHrs(mins) : ""}</span>}
+          <span className="nm">{person}</span>
+          {!staffView && mins > 0 && <span className="gh-hours-badge">{fmtHrs(mins)}</span>}
+          {!staffView && (
+            <button
+              className="xbtn"
+              title={`Remove ${person}`}
+              onClick={() => onDeleteStaff(person)}
+            >
+              ×
+            </button>
+          )}
         </span>
       </div>
       {DAYS.map((day) => {
-        const cellEntries = entries
-          .map((e, i) => ({ e, i }))
-          .filter((o) => o.e.staff === person && o.e.day === day);
+        const cellEntries = rows.filter((r) => r.staff_name === person && r.day === day);
         return (
           <div key={day} className="gh-cell">
-            {cellEntries.map((o) =>
-              o.e.off ? (
+            {cellEntries.map((r) =>
+              r.is_off ? (
                 <button
-                  key={o.i}
+                  key={r.id}
                   className="gh-off"
-                  onClick={staffView ? undefined : () => onEdit(o.i)}
+                  onClick={staffView ? undefined : () => onEdit(r.id)}
                   disabled={staffView}
                 >
                   off
                 </button>
               ) : (
                 <button
-                  key={o.i}
+                  key={r.id}
                   className="gh-shift"
-                  onClick={staffView ? undefined : () => onEdit(o.i)}
+                  onClick={staffView ? undefined : () => onEdit(r.id)}
                   disabled={staffView}
                 >
-                  {fmt(o.e.start!)}–{fmt(o.e.end!)}
+                  {fmt(r.start_time!)}–{fmt(r.end_time!)}
                 </button>
               ),
             )}
