@@ -84,18 +84,19 @@ const STYLE = `
 .gh-tool:hover{background:#f4f3ec}
 .gh-tool.primary{background:#0d3a2c;color:#fff;border-color:#0d3a2c}
 .gh-tool.accent{background:#C9A961;color:#0d3a2c;border-color:#C9A961}
-.gh-grid{display:grid;grid-template-columns:120px repeat(7,1fr) 76px;gap:3px;font-size:12px}
-.gh-grid.nototal{grid-template-columns:120px repeat(7,1fr)}
+.gh-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.gh-grid{display:grid;grid-template-columns:120px repeat(7,minmax(96px,1fr)) 76px;gap:3px;font-size:12px;min-width:960px}
+.gh-grid.nototal{grid-template-columns:120px repeat(7,minmax(96px,1fr));min-width:884px}
 .gh-header{font-size:11px;font-weight:600;color:#5b5b55;text-align:center;padding:6px 2px;text-transform:uppercase;letter-spacing:.3px}
 .gh-header.total-h{color:#0d3a2c}
-.gh-cell{padding:6px 4px;min-height:40px;display:flex;flex-direction:column;gap:3px}
+.gh-cell{padding:6px 4px;min-height:40px;display:flex;flex-direction:column;gap:3px;min-width:0}
 .gh-namecell{background:#F7F4EC;border-radius:4px;justify-content:center;position:relative}
 .gh-name{font-weight:600;color:#0d3a2c;font-size:12.5px;display:flex;align-items:center;gap:6px}
 .gh-name .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gh-name .xbtn{border:0;background:transparent;color:#b3261e;cursor:pointer;font-size:14px;line-height:1;padding:2px 4px;border-radius:4px}
 .gh-name .xbtn:hover{background:#fdeceb}
 .gh-hours-badge{font-size:10px;font-weight:600;color:#8d8d85}
-.gh-shift{background:#E1F5EE;color:#085041;border-radius:3px;padding:4px 6px;font-size:10px;font-weight:600;line-height:1.3;cursor:pointer;text-align:center;border:0}
+.gh-shift{background:#E1F5EE;color:#085041;border-radius:3px;padding:4px 6px;font-size:10px;font-weight:600;line-height:1.3;cursor:pointer;text-align:center;border:0;white-space:nowrap}
 .gh-shift:hover{opacity:.85}
 .gh-off{background:#f4f3ec;color:#8d8d85;font-size:10px;font-weight:600;border-radius:3px;padding:4px 6px;text-align:center;cursor:pointer;border:0}
 .gh-off:hover{opacity:.85}
