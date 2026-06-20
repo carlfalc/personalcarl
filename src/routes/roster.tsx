@@ -403,12 +403,23 @@ function RosterPage() {
               </button>
             </div>
             <label className="gh-datepick">
-              Week of
+              Week of{weekStartDay != null ? ` ${DAY_ABBR[weekStartDay]}` : ""}
               <input
                 type="date"
                 value={weekDate ?? ""}
                 onChange={(e) => setWeekDate(e.target.value)}
               />
+              <select
+                className="gh-daypick"
+                aria-label="Week starts on"
+                value={weekStartDay ?? ""}
+                onChange={(e) => setWeekStartDay(e.target.value)}
+              >
+                <option value="">Week starts…</option>
+                {DAYS.map((d, i) => (
+                  <option key={d} value={i}>{d}</option>
+                ))}
+              </select>
             </label>
           </div>
           <div className="gh-toolbar">
