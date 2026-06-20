@@ -541,6 +541,87 @@ export type Database = {
         }
         Relationships: []
       }
+      roster_training: {
+        Row: {
+          created_at: string
+          day: string
+          end_time: string | null
+          id: string
+          position: number
+          staff_name: string
+          start_time: string | null
+          training_text: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          day: string
+          end_time?: string | null
+          id?: string
+          position?: number
+          staff_name: string
+          start_time?: string | null
+          training_text?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          day?: string
+          end_time?: string | null
+          id?: string
+          position?: number
+          staff_name?: string
+          start_time?: string | null
+          training_text?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      roster_training_meta: {
+        Row: {
+          id: number
+          updated_at: string
+          week_start_date: string | null
+          week_start_day: number | null
+        }
+        Insert: {
+          id?: number
+          updated_at?: string
+          week_start_date?: string | null
+          week_start_day?: number | null
+        }
+        Update: {
+          id?: number
+          updated_at?: string
+          week_start_date?: string | null
+          week_start_day?: number | null
+        }
+        Relationships: []
+      }
+      roster_training_snapshots: {
+        Row: {
+          data: Json
+          id: string
+          label: string | null
+          saved_at: string
+          saved_by: string | null
+        }
+        Insert: {
+          data?: Json
+          id?: string
+          label?: string | null
+          saved_at?: string
+          saved_by?: string | null
+        }
+        Update: {
+          data?: Json
+          id?: string
+          label?: string | null
+          saved_at?: string
+          saved_by?: string | null
+        }
+        Relationships: []
+      }
       schedules: {
         Row: {
           created_at: string
