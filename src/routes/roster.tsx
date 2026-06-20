@@ -491,7 +491,7 @@ function RosterPage() {
                   <div className="gh-cell gh-totalcell"><span className="v">–</span></div>
 
                   <div className="gh-cell gh-countlabel">After 5pm</div>
-                  {DAYS.map((d) => (
+                  {orderedDays.map((d) => (
                     <div key={`a-${d}`} className="gh-cell gh-countcell">
                       <span className="v">{dayCount(d, afterFive)}</span>
                     </div>
