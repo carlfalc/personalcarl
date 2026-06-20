@@ -448,6 +448,7 @@ function RosterPage() {
           <p className="gh-note">Loading roster…</p>
         ) : (
           <>
+            <div className="gh-scroll">
             <div className={`gh-grid${showTotals ? "" : " nototal"}`}>
               <div className="gh-header" />
               {DAYS.map((d) => (
