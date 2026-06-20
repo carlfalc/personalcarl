@@ -493,6 +493,7 @@ function RosterPage() {
                 </>
               )}
             </div>
+            </div>
 
             {showTotals && (
               <div className="gh-grandrow">
