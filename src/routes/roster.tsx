@@ -323,8 +323,13 @@ function RosterPage() {
   };
 
   const setWeekDate = async (d: string) => {
-    setMeta((m) => ({ ...m, [rosterType]: d || null }));
-    await supabase.from("roster_meta").upsert({ roster_type: rosterType, week_start_date: d || null, updated_at: new Date().toISOString() });
+    setMeta((m) => ({ ...m, [rosterType]: { ...m[rosterType], date: d || null } }));
+    await supabase.from("roster_meta").upsert({ roster_type: rosterType, week_start_date: d || null, week_start_day: weekStartDay, updated_at: new Date().toISOString() });
+  };
+  const setWeekStartDay = async (v: string) => {
+    const day = v === "" ? null : Number(v);
+    setMeta((m) => ({ ...m, [rosterType]: { ...m[rosterType], day } }));
+    await supabase.from("roster_meta").upsert({ roster_type: rosterType, week_start_date: weekDate, week_start_day: day, updated_at: new Date().toISOString() });
   };
 
   const saveSnapshot = async () => {
