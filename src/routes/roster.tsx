@@ -217,10 +217,16 @@ function RosterPage() {
       const cur = map.get(r.staff_name);
       if (cur === undefined || r.position < cur) map.set(r.staff_name, r.position);
     });
-    return Array.from(map.entries())
+    const entries = Array.from(map.entries());
+    if (rosterType === "staff") {
+      return entries
+        .sort((a, b) => a[0].localeCompare(b[0], undefined, { sensitivity: "base" }))
+        .map(([n]) => n);
+    }
+    return entries
       .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))
       .map(([n]) => n);
-  }, [rows]);
+  }, [rows, rosterType]);
 
   const staffView = mode === "staff";
   // Manager roster always shows hours/totals (even in staff view); only the Staff roster hides them in staff view.
