@@ -166,7 +166,7 @@ function buildStaffHTML(title: string, weekDate: string | null, startDay: number
 function RosterPage() {
   const [allRows, setAllRows] = useState<Row[]>([]);
   const [allSnapshots, setAllSnapshots] = useState<Snapshot[]>([]);
-  const [meta, setMeta] = useState<Record<RosterType, string | null>>({ staff: null, manager: null });
+  const [meta, setMeta] = useState<Record<RosterType, MetaVal>>({ staff: { date: null, day: null }, manager: { date: null, day: null } });
   const [loading, setLoading] = useState(true);
   const [rosterType, setRosterType] = useState<RosterType>("staff");
   const [mode, setMode] = useState<"manager" | "staff">("manager");
