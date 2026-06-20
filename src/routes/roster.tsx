@@ -660,7 +660,7 @@ function RosterRow({
           )}
         </span>
       </div>
-      {DAYS.map((day) => {
+      {days.map((day) => {
         const cellEntries = rows.filter((r) => r.staff_name === person && r.day === day);
         return (
           <div key={day} className="gh-cell">
