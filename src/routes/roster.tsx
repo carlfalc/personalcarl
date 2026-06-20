@@ -284,11 +284,18 @@ function RosterPage() {
     const pos =
       rows.find((r) => r.staff_name === mStaff)?.position ??
       (rows.length ? Math.max(...rows.map((r) => r.position)) + 1 : 0);
-    const base = { staff_name: mStaff, day: mDay, position: pos, roster_type: rosterType };
-    const payload =
+    const payload: {
+      staff_name: string;
+      day: string;
+      position: number;
+      roster_type: RosterType;
+      is_off: boolean;
+      start_time: string | null;
+      end_time: string | null;
+    } =
       mType === "off"
-        ? { ...base, is_off: true, start_time: null, end_time: null }
-        : { ...base, is_off: false, start_time: mStart, end_time: mEnd };
+        ? { staff_name: mStaff, day: mDay, position: pos, roster_type: rosterType, is_off: true, start_time: null, end_time: null }
+        : { staff_name: mStaff, day: mDay, position: pos, roster_type: rosterType, is_off: false, start_time: mStart, end_time: mEnd };
     if (modal.kind === "edit") {
       await supabase.from("roster_staff").update(payload).eq("id", modal.id);
     } else {
