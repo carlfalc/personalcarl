@@ -457,7 +457,7 @@ function RosterPage() {
             <div className="gh-scroll">
             <div className={`gh-grid${showTotals ? "" : " nototal"}`}>
               <div className="gh-header" />
-              {DAYS.map((d) => (
+              {orderedDays.map((d) => (
                 <div key={d} className="gh-header">{d}</div>
               ))}
               {showTotals && <div className="gh-header total-h">Total</div>}
@@ -472,6 +472,7 @@ function RosterPage() {
                     staffView={staffView}
                     showTotals={showTotals}
                     rows={rows}
+                    days={orderedDays}
                     onAdd={openAdd}
                     onEdit={openEdit}
                     onDeleteStaff={deleteStaff}
