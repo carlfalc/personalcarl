@@ -366,7 +366,7 @@ function RosterPage() {
   };
   const shareStaff = async () => {
     const title = rosterType === "manager" ? "Management Roster" : "Roster";
-    const html = buildStaffHTML(title, weekDate, staffList, rows);
+    const html = buildStaffHTML(title, weekDate, weekStartDay, staffList, rows);
     try {
       const file = new File([html], `Glasshouse_${rosterType === "manager" ? "Management" : "Staff"}_Roster.html`, { type: "text/html" });
       const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean };
