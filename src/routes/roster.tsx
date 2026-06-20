@@ -24,9 +24,11 @@ type Row = {
   roster_type: RosterType;
 };
 type Snapshot = { id: string; saved_at: string; label: string | null; data: Row[]; roster_type: RosterType };
-type Meta = { roster_type: RosterType; week_start_date: string | null };
+type Meta = { roster_type: RosterType; week_start_date: string | null; week_start_day: number | null };
+type MetaVal = { date: string | null; day: number | null };
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAY_ABBR = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 
 const toMins = (t: string) => {
   const [h, m] = t.split(":").map(Number);
@@ -73,7 +75,7 @@ const STYLE = `
 .gh-rtoggle button{font-size:12px;padding:7px 12px;border:0;background:#fff8e6;color:#0d3a2c;cursor:pointer;font-weight:600}
 .gh-rtoggle button.active{background:#C9A961;color:#0d3a2c}
 .gh-datepick{display:flex;align-items:center;gap:6px;margin-left:8px;font-size:12px;color:#5b5b55}
-.gh-datepick input{font-size:12px;padding:5px 7px;border:1px solid #cdcbc1;border-radius:6px;background:#fff;color:#1d1d1b}
+.gh-datepick input,.gh-daypick{font-size:12px;padding:5px 7px;border:1px solid #cdcbc1;border-radius:6px;background:#fff;color:#1d1d1b}
 .gh-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .gh-seg{display:inline-flex;border:1px solid #cdcbc1;border-radius:8px;overflow:hidden}
 .gh-seg button{font-size:12px;padding:7px 12px;border:0;background:transparent;color:#5b5b55;cursor:pointer}
@@ -139,7 +141,7 @@ const prettyDate = (d: string | null) => {
   return dt.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 };
 
-function buildStaffHTML(title: string, weekDate: string | null, staff: string[], rows: Row[]) {
+function buildStaffHTML(title: string, weekDate: string | null, startDay: number | null, staff: string[], rows: Row[]) {
   let html = "";
   html += '<div class="gh-header"></div>' + DAYS.map((d) => `<div class="gh-header">${d}</div>`).join("");
   staff.forEach((person) => {
@@ -156,14 +158,15 @@ function buildStaffHTML(title: string, weekDate: string | null, staff: string[],
       html += c;
     });
   });
-  const dateHtml = weekDate ? `<span>Week of ${prettyDate(weekDate)}</span>` : "";
+  const abbr = startDay != null ? ` ${DAY_ABBR[startDay]}` : "";
+  const dateHtml = weekDate ? `<span>Week of${abbr} ${prettyDate(weekDate)}</span>` : (abbr ? `<span>Week of${abbr}</span>` : "");
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title><style>${STYLE}</style></head><body><div class="gh-wrap"><div class="gh-topbar"><div class="gh-brand"><h1>Glasshouse</h1><span>${title}</span>${dateHtml}</div></div><div class="gh-grid nototal">${html}</div></div></body></html>`;
 }
 
 function RosterPage() {
   const [allRows, setAllRows] = useState<Row[]>([]);
   const [allSnapshots, setAllSnapshots] = useState<Snapshot[]>([]);
-  const [meta, setMeta] = useState<Record<RosterType, string | null>>({ staff: null, manager: null });
+  const [meta, setMeta] = useState<Record<RosterType, MetaVal>>({ staff: { date: null, day: null }, manager: { date: null, day: null } });
   const [loading, setLoading] = useState(true);
   const [rosterType, setRosterType] = useState<RosterType>("staff");
   const [mode, setMode] = useState<"manager" | "staff">("manager");
@@ -182,14 +185,14 @@ function RosterPage() {
       const [a, b, c] = await Promise.all([
         supabase.from("roster_staff").select("*").order("position").order("day"),
         supabase.from("roster_snapshots").select("id,saved_at,label,data,roster_type").order("saved_at", { ascending: false }).limit(100),
-        supabase.from("roster_meta").select("roster_type,week_start_date"),
+        supabase.from("roster_meta").select("roster_type,week_start_date,week_start_day"),
       ]);
       if (cancelled) return;
       if (a.data) setAllRows(a.data as Row[]);
       if (b.data) setAllSnapshots(b.data as Snapshot[]);
       if (c.data) {
-        const m: Record<RosterType, string | null> = { staff: null, manager: null };
-        (c.data as Meta[]).forEach((x) => { m[x.roster_type] = x.week_start_date; });
+        const m: Record<RosterType, MetaVal> = { staff: { date: null, day: null }, manager: { date: null, day: null } };
+        (c.data as Meta[]).forEach((x) => { m[x.roster_type] = { date: x.week_start_date, day: x.week_start_day }; });
         setMeta(m);
       }
       setLoading(false);
@@ -209,7 +212,8 @@ function RosterPage() {
 
   const rows = useMemo(() => allRows.filter((r) => r.roster_type === rosterType), [allRows, rosterType]);
   const snapshots = useMemo(() => allSnapshots.filter((s) => s.roster_type === rosterType), [allSnapshots, rosterType]);
-  const weekDate = meta[rosterType];
+  const weekDate = meta[rosterType].date;
+  const weekStartDay = meta[rosterType].day;
 
   const staffList = useMemo(() => {
     const map = new Map<string, number>();
@@ -319,8 +323,13 @@ function RosterPage() {
   };
 
   const setWeekDate = async (d: string) => {
-    setMeta((m) => ({ ...m, [rosterType]: d || null }));
-    await supabase.from("roster_meta").upsert({ roster_type: rosterType, week_start_date: d || null, updated_at: new Date().toISOString() });
+    setMeta((m) => ({ ...m, [rosterType]: { ...m[rosterType], date: d || null } }));
+    await supabase.from("roster_meta").upsert({ roster_type: rosterType, week_start_date: d || null, week_start_day: weekStartDay, updated_at: new Date().toISOString() });
+  };
+  const setWeekStartDay = async (v: string) => {
+    const day = v === "" ? null : Number(v);
+    setMeta((m) => ({ ...m, [rosterType]: { ...m[rosterType], day } }));
+    await supabase.from("roster_meta").upsert({ roster_type: rosterType, week_start_date: weekDate, week_start_day: day, updated_at: new Date().toISOString() });
   };
 
   const saveSnapshot = async () => {
@@ -345,7 +354,7 @@ function RosterPage() {
 
   const downloadStaff = () => {
     const title = rosterType === "manager" ? "Management Roster" : "Roster";
-    const blob = new Blob([buildStaffHTML(title, weekDate, staffList, rows)], { type: "text/html" });
+    const blob = new Blob([buildStaffHTML(title, weekDate, weekStartDay, staffList, rows)], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -357,7 +366,7 @@ function RosterPage() {
   };
   const shareStaff = async () => {
     const title = rosterType === "manager" ? "Management Roster" : "Roster";
-    const html = buildStaffHTML(title, weekDate, staffList, rows);
+    const html = buildStaffHTML(title, weekDate, weekStartDay, staffList, rows);
     try {
       const file = new File([html], `Glasshouse_${rosterType === "manager" ? "Management" : "Staff"}_Roster.html`, { type: "text/html" });
       const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean };
@@ -394,12 +403,23 @@ function RosterPage() {
               </button>
             </div>
             <label className="gh-datepick">
-              Week of
+              Week of{weekStartDay != null ? ` ${DAY_ABBR[weekStartDay]}` : ""}
               <input
                 type="date"
                 value={weekDate ?? ""}
                 onChange={(e) => setWeekDate(e.target.value)}
               />
+              <select
+                className="gh-daypick"
+                aria-label="Week starts on"
+                value={weekStartDay ?? ""}
+                onChange={(e) => setWeekStartDay(e.target.value)}
+              >
+                <option value="">Week starts…</option>
+                {DAYS.map((d, i) => (
+                  <option key={d} value={i}>{d}</option>
+                ))}
+              </select>
             </label>
           </div>
           <div className="gh-toolbar">

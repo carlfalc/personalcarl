@@ -456,16 +456,19 @@ export type Database = {
           roster_type: string
           updated_at: string
           week_start_date: string | null
+          week_start_day: number | null
         }
         Insert: {
           roster_type: string
           updated_at?: string
           week_start_date?: string | null
+          week_start_day?: number | null
         }
         Update: {
           roster_type?: string
           updated_at?: string
           week_start_date?: string | null
+          week_start_day?: number | null
         }
         Relationships: []
       }
