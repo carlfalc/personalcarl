@@ -124,7 +124,24 @@ const STYLE = `
 .gh-snap-list{display:flex;flex-direction:column;gap:6px}
 .gh-snap-row{display:flex;align-items:center;gap:8px;padding:6px 8px;background:#F7F4EC;border-radius:6px;font-size:12px}
 .gh-snap-row .when{flex:1;color:#1d1d1b;font-weight:600}
-@media print{.gh-toolbar{display:none}.gh-empty{display:none}.gh-modal-backdrop{display:none!important}.gh-snap-panel{display:none}.gh-name .xbtn{display:none}.gh-rtoggle{display:none}.gh-datepick input{border:0;background:transparent}}
+@media print{
+  @page{size:A4 landscape;margin:10mm}
+  html,body{background:#fff!important}
+  [data-sidebar],aside,nav[aria-label*="sidebar" i]{display:none!important}
+  header:not(.gh-topbar){display:none!important}
+  .gh-toolbar,.gh-empty,.gh-snap-panel,.gh-rtoggle,.gh-name .xbtn,.gh-daypick{display:none!important}
+  .gh-modal-backdrop{display:none!important}
+  .gh-datepick input{border:0;background:transparent;padding:0}
+  .gh-scroll{overflow:visible!important}
+  .gh-grid,.gh-grid.nototal{min-width:0!important;gap:0!important;font-size:11px}
+  .gh-header{border:1px solid #0d3a2c;background:#0d3a2c;color:#fff!important;padding:6px 4px}
+  .gh-cell{border:1px solid #0d3a2c;border-top:0;padding:6px 4px;min-height:46px}
+  .gh-grid > .gh-header + .gh-header,
+  .gh-grid > .gh-cell + .gh-cell{border-left:0}
+  .gh-namecell{background:#F7F4EC!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .gh-shift,.gh-off{background:transparent!important;color:#0d3a2c!important;padding:2px 0;font-size:11px}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
 .gh-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;display:flex;align-items:center;justify-content:center}
 .gh-modal-card{background:#fff;border:1px solid #e3e1d8;border-radius:12px;padding:1.25rem;width:320px}
 .gh-modal-card h3{font-size:15px;font-weight:600;margin:0 0 4px}
