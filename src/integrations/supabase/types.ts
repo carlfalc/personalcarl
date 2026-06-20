@@ -451,12 +451,31 @@ export type Database = {
         }
         Relationships: []
       }
+      roster_meta: {
+        Row: {
+          roster_type: string
+          updated_at: string
+          week_start_date: string | null
+        }
+        Insert: {
+          roster_type: string
+          updated_at?: string
+          week_start_date?: string | null
+        }
+        Update: {
+          roster_type?: string
+          updated_at?: string
+          week_start_date?: string | null
+        }
+        Relationships: []
+      }
       roster_snapshots: {
         Row: {
           created_at: string
           data: Json
           id: string
           label: string | null
+          roster_type: string
           saved_at: string
           saved_by: string | null
         }
@@ -465,6 +484,7 @@ export type Database = {
           data: Json
           id?: string
           label?: string | null
+          roster_type?: string
           saved_at?: string
           saved_by?: string | null
         }
@@ -473,6 +493,7 @@ export type Database = {
           data?: Json
           id?: string
           label?: string | null
+          roster_type?: string
           saved_at?: string
           saved_by?: string | null
         }
@@ -486,6 +507,7 @@ export type Database = {
           id: string
           is_off: boolean
           position: number
+          roster_type: string
           staff_name: string
           start_time: string | null
           updated_at: string
@@ -497,6 +519,7 @@ export type Database = {
           id?: string
           is_off?: boolean
           position?: number
+          roster_type?: string
           staff_name: string
           start_time?: string | null
           updated_at?: string
@@ -508,6 +531,7 @@ export type Database = {
           id?: string
           is_off?: boolean
           position?: number
+          roster_type?: string
           staff_name?: string
           start_time?: string | null
           updated_at?: string
