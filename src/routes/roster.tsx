@@ -143,11 +143,12 @@ const prettyDate = (d: string | null) => {
 };
 
 function buildStaffHTML(title: string, weekDate: string | null, startDay: number | null, staff: string[], rows: Row[]) {
+  const orderedDays = startDay != null ? [...DAYS.slice(startDay), ...DAYS.slice(0, startDay)] : DAYS;
   let html = "";
-  html += '<div class="gh-header"></div>' + DAYS.map((d) => `<div class="gh-header">${d}</div>`).join("");
+  html += '<div class="gh-header"></div>' + orderedDays.map((d) => `<div class="gh-header">${d}</div>`).join("");
   staff.forEach((person) => {
     html += `<div class="gh-cell gh-namecell"><span class="gh-name">${person}</span></div>`;
-    DAYS.forEach((day) => {
+    orderedDays.forEach((day) => {
       const ce = rows.filter((e) => e.staff_name === person && e.day === day);
       let c = '<div class="gh-cell">';
       ce.forEach((e) => {
@@ -159,8 +160,9 @@ function buildStaffHTML(title: string, weekDate: string | null, startDay: number
       html += c;
     });
   });
-  const abbr = startDay != null ? ` ${DAY_ABBR[startDay]}` : "";
-  const dateHtml = weekDate ? `<span>Week of${abbr} ${prettyDate(weekDate)}</span>` : (abbr ? `<span>Week of${abbr}</span>` : "");
+  const dateHtml = weekDate
+    ? `<span>Pay week commencing ${prettyDate(weekDate)}</span>`
+    : (startDay != null ? `<span>Pay week commencing ${DAY_ABBR[startDay]}</span>` : "");
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title><style>${STYLE}</style></head><body><div class="gh-wrap"><div class="gh-topbar"><div class="gh-brand"><h1>Glasshouse</h1><span>${title}</span>${dateHtml}</div></div><div class="gh-grid nototal">${html}</div></div></body></html>`;
 }
 
@@ -215,6 +217,10 @@ function RosterPage() {
   const snapshots = useMemo(() => allSnapshots.filter((s) => s.roster_type === rosterType), [allSnapshots, rosterType]);
   const weekDate = meta[rosterType].date;
   const weekStartDay = meta[rosterType].day;
+  const orderedDays = useMemo(
+    () => (weekStartDay != null ? [...DAYS.slice(weekStartDay), ...DAYS.slice(0, weekStartDay)] : DAYS),
+    [weekStartDay],
+  );
 
   const staffList = useMemo(() => {
     const map = new Map<string, number>();
@@ -451,7 +457,7 @@ function RosterPage() {
             <div className="gh-scroll">
             <div className={`gh-grid${showTotals ? "" : " nototal"}`}>
               <div className="gh-header" />
-              {DAYS.map((d) => (
+              {orderedDays.map((d) => (
                 <div key={d} className="gh-header">{d}</div>
               ))}
               {showTotals && <div className="gh-header total-h">Total</div>}
@@ -466,6 +472,7 @@ function RosterPage() {
                     staffView={staffView}
                     showTotals={showTotals}
                     rows={rows}
+                    days={orderedDays}
                     onAdd={openAdd}
                     onEdit={openEdit}
                     onDeleteStaff={deleteStaff}
@@ -476,7 +483,7 @@ function RosterPage() {
               {!staffView && (
                 <>
                   <div className="gh-cell gh-countlabel">On at 12pm</div>
-                  {DAYS.map((d) => (
+                  {orderedDays.map((d) => (
                     <div key={`n-${d}`} className="gh-cell gh-countcell">
                       <span className="v">{dayCount(d, coversNoon)}</span>
                     </div>
@@ -484,7 +491,7 @@ function RosterPage() {
                   <div className="gh-cell gh-totalcell"><span className="v">–</span></div>
 
                   <div className="gh-cell gh-countlabel">After 5pm</div>
-                  {DAYS.map((d) => (
+                  {orderedDays.map((d) => (
                     <div key={`a-${d}`} className="gh-cell gh-countcell">
                       <span className="v">{dayCount(d, afterFive)}</span>
                     </div>
@@ -574,7 +581,7 @@ function RosterPage() {
                   <div className="gh-modal-row">
                     <label>Day</label>
                     <select value={mDay} onChange={(e) => setMDay(e.target.value)}>
-                      {DAYS.map((d) => (
+                      {orderedDays.map((d) => (
                         <option key={d} value={d}>{d}</option>
                       ))}
                     </select>
@@ -621,6 +628,7 @@ function RosterRow({
   staffView,
   showTotals,
   rows,
+  days,
   onAdd,
   onEdit,
   onDeleteStaff,
@@ -630,6 +638,7 @@ function RosterRow({
   staffView: boolean;
   showTotals: boolean;
   rows: Row[];
+  days: string[];
   onAdd: (staff: string, day: string) => void;
   onEdit: (id: string) => void;
   onDeleteStaff: (name: string) => void;
@@ -651,7 +660,7 @@ function RosterRow({
           )}
         </span>
       </div>
-      {DAYS.map((day) => {
+      {days.map((day) => {
         const cellEntries = rows.filter((r) => r.staff_name === person && r.day === day);
         return (
           <div key={day} className="gh-cell">
