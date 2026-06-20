@@ -1,0 +1,1 @@
+ALTER TABLE public.roster_meta ADD COLUMN IF NOT EXISTS week_start_day smallint;
