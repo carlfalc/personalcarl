@@ -483,7 +483,7 @@ function RosterPage() {
               {!staffView && (
                 <>
                   <div className="gh-cell gh-countlabel">On at 12pm</div>
-                  {DAYS.map((d) => (
+                  {orderedDays.map((d) => (
                     <div key={`n-${d}`} className="gh-cell gh-countcell">
                       <span className="v">{dayCount(d, coversNoon)}</span>
                     </div>
