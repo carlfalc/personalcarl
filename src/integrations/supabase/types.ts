@@ -451,6 +451,69 @@ export type Database = {
         }
         Relationships: []
       }
+      roster_snapshots: {
+        Row: {
+          created_at: string
+          data: Json
+          id: string
+          label: string | null
+          saved_at: string
+          saved_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          data: Json
+          id?: string
+          label?: string | null
+          saved_at?: string
+          saved_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          id?: string
+          label?: string | null
+          saved_at?: string
+          saved_by?: string | null
+        }
+        Relationships: []
+      }
+      roster_staff: {
+        Row: {
+          created_at: string
+          day: string
+          end_time: string | null
+          id: string
+          is_off: boolean
+          position: number
+          staff_name: string
+          start_time: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          day: string
+          end_time?: string | null
+          id?: string
+          is_off?: boolean
+          position?: number
+          staff_name: string
+          start_time?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          day?: string
+          end_time?: string | null
+          id?: string
+          is_off?: boolean
+          position?: number
+          staff_name?: string
+          start_time?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       schedules: {
         Row: {
           created_at: string
