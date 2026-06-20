@@ -1,6 +1,21 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
+  Sun,
+  CheckSquare,
+  Lightbulb,
+  ListTodo,
+  BookOpen,
+  CalendarDays,
+  Mail,
+  Image as ImageIcon,
+  UserCircle2,
+  Clock,
+  Users,
+  Settings as SettingsIcon,
+  type LucideIcon,
+} from "lucide-react";
+import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
@@ -20,26 +35,26 @@ type CountKey = "tasks" | "ideas" | "todos" | "meetings" | "images";
 type CountColor = "red" | "green" | "black";
 
 const items: Array<{
-  title: string; subtitle: string; url: string; emoji: string; tint: string;
+  title: string; subtitle: string; url: string; icon: LucideIcon;
   countKey?: CountKey; countColor?: CountColor;
 }> = [
-  { title: "Today",     subtitle: "Day at a glance",            url: "/",         emoji: "☀️", tint: "from-amber-200 to-orange-300" },
-  { title: "Tasks",     subtitle: "Things to do",               url: "/tasks",    emoji: "✅", tint: "from-emerald-200 to-emerald-300", countKey: "tasks",    countColor: "red" },
-  { title: "Ideas",     subtitle: "Capture & explore",          url: "/ideas",    emoji: "💡", tint: "from-yellow-200 to-amber-300",    countKey: "ideas",    countColor: "green" },
-  { title: "To-Dos",    subtitle: "Quick lists",                url: "/todos",    emoji: "📋", tint: "from-sky-200 to-sky-300",         countKey: "todos",    countColor: "red" },
-  { title: "Diary",     subtitle: "Notes & reflections",        url: "/diary",    emoji: "📓", tint: "from-rose-200 to-rose-300" },
-  { title: "Meetings",  subtitle: "Calendar & agenda",          url: "/meetings", emoji: "📅", tint: "from-violet-200 to-violet-300",   countKey: "meetings", countColor: "red" },
-  { title: "Email",     subtitle: "Voice → Gmail drafts",       url: "/email",    emoji: "✉️", tint: "from-pink-200 to-rose-300" },
-  { title: "Images",    subtitle: "Photos from Telegram",       url: "/images",   emoji: "🖼️", tint: "from-cyan-200 to-teal-300",       countKey: "images",   countColor: "black" },
-  { title: "About Me",  subtitle: "Profile & memory",           url: "/about",    emoji: "🧠", tint: "from-fuchsia-200 to-pink-300" },
-  { title: "Schedules", subtitle: "Recurring AI briefings",      url: "/schedules", emoji: "⏰", tint: "from-indigo-200 to-blue-300" },
-  { title: "Roster",    subtitle: "Glasshouse weekly roster",   url: "/roster",   emoji: "🗓️", tint: "from-emerald-200 to-green-300" },
-  { title: "Settings",  subtitle: "Telegram & birthdays",       url: "/settings", emoji: "⚙️", tint: "from-slate-200 to-slate-300" },
+  { title: "Today",     subtitle: "Day at a glance",            url: "/",          icon: Sun },
+  { title: "Tasks",     subtitle: "Things to do",               url: "/tasks",     icon: CheckSquare,   countKey: "tasks",    countColor: "red" },
+  { title: "Ideas",     subtitle: "Capture & explore",          url: "/ideas",     icon: Lightbulb,     countKey: "ideas",    countColor: "green" },
+  { title: "To-Dos",    subtitle: "Quick lists",                url: "/todos",     icon: ListTodo,      countKey: "todos",    countColor: "red" },
+  { title: "Diary",     subtitle: "Notes & reflections",        url: "/diary",     icon: BookOpen },
+  { title: "Meetings",  subtitle: "Calendar & agenda",          url: "/meetings",  icon: CalendarDays,  countKey: "meetings", countColor: "red" },
+  { title: "Email",     subtitle: "Voice → Gmail drafts",       url: "/email",     icon: Mail },
+  { title: "Images",    subtitle: "Photos from Telegram",       url: "/images",    icon: ImageIcon,     countKey: "images",   countColor: "black" },
+  { title: "About Me",  subtitle: "Profile & memory",           url: "/about",     icon: UserCircle2 },
+  { title: "Schedules", subtitle: "Recurring AI briefings",     url: "/schedules", icon: Clock },
+  { title: "Roster",    subtitle: "Glasshouse weekly roster",   url: "/roster",    icon: Users },
+  { title: "Settings",  subtitle: "Telegram & birthdays",       url: "/settings",  icon: SettingsIcon },
 ];
 
 const COUNT_COLOR_CLASS: Record<CountColor, string> = {
-  red: "text-red-600",
-  green: "text-emerald-600",
+  red: "text-destructive",
+  green: "text-primary",
   black: "text-foreground",
 };
 
