@@ -556,6 +556,9 @@ function TrainingRow({
   onAdd,
   onEdit,
   onDeleteStaff,
+  onCopy,
+  onPaste,
+  hasClipboard,
 }: {
   person: string;
   staffView: boolean;
@@ -564,6 +567,9 @@ function TrainingRow({
   onAdd: (staff: string, day: string) => void;
   onEdit: (id: string) => void;
   onDeleteStaff: (name: string) => void;
+  onCopy: (r: Row) => void;
+  onPaste: (staff: string, day: string) => void;
+  hasClipboard: boolean;
 }) {
   return (
     <>
@@ -588,21 +594,42 @@ function TrainingRow({
             {cellEntries.map((r) => {
               const time = r.start_time && r.end_time ? `${fmt(r.start_time)}–${fmt(r.end_time)}` : "";
               return (
-                <button
-                  key={r.id}
-                  className="gh-train"
-                  onClick={staffView ? undefined : () => onEdit(r.id)}
-                  disabled={staffView}
-                  type="button"
-                >
-                  {time && <span className="t">{time}</span>}
-                  {r.training_text && <span className="desc">{r.training_text}</span>}
-                  {!time && !r.training_text && <span className="desc">(empty)</span>}
-                </button>
+                <div key={r.id} className="gh-train-wrap">
+                  <button
+                    className="gh-train"
+                    onClick={staffView ? undefined : () => onEdit(r.id)}
+                    disabled={staffView}
+                    type="button"
+                  >
+                    {time && <span className="t">{time}</span>}
+                    {r.training_text && <span className="desc">{r.training_text}</span>}
+                    {!time && !r.training_text && <span className="desc">(empty)</span>}
+                  </button>
+                  {!staffView && r.start_time && r.end_time && (
+                    <button
+                      className="gh-copybtn"
+                      title="Copy this training (time + comment)"
+                      onClick={(e) => { e.stopPropagation(); onCopy(r); }}
+                      type="button"
+                    >
+                      ⧉
+                    </button>
+                  )}
+                </div>
               );
             })}
             {!staffView && (
-              <button className="gh-empty" onClick={() => onAdd(person, day)}>+</button>
+              hasClipboard ? (
+                <button
+                  className="gh-empty gh-paste"
+                  title="Paste copied training here"
+                  onClick={() => onPaste(person, day)}
+                >
+                  📋 Paste
+                </button>
+              ) : (
+                <button className="gh-empty" onClick={() => onAdd(person, day)}>+</button>
+              )
             )}
           </div>
         );
@@ -610,3 +637,4 @@ function TrainingRow({
     </>
   );
 }
+
