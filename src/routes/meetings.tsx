@@ -78,15 +78,37 @@ function MeetingsPage() {
     },
   });
 
-  const addParticipant = () => {
-    const e = emailDraft.trim();
-    if (!isValidEmail(e)) { toast.error("Enter a valid email"); return; }
-    if (participants.some((p) => p.email.toLowerCase() === e.toLowerCase())) {
-      setEmailDraft(""); return;
+  // Distinct recent attendee emails harvested from past meeting notes ("Participants: a@x, b@y").
+  const recentEmails = (() => {
+    const set = new Set<string>();
+    for (const m of meetings) {
+      const line = (m.notes ?? "").match(/Participants:\s*([^\n]+)/i)?.[1] ?? "";
+      for (const part of line.split(/[,;\s]+/)) {
+        const e = part.trim();
+        if (isValidEmail(e)) set.add(e.toLowerCase());
+      }
     }
-    setParticipants([...participants, { email: e, sendInvite: isGmail(e) }]);
+    return [...set].sort();
+  })();
+
+  const suggestions = (() => {
+    const q = emailDraft.trim().toLowerCase();
+    if (q.length < 1) return [];
+    const taken = new Set(participants.map((p) => p.email.toLowerCase()));
+    return recentEmails.filter((e) => !taken.has(e) && e.includes(q)).slice(0, 6);
+  })();
+
+  const addEmail = (raw: string) => {
+    const e = raw.trim().replace(/[,;]$/, "");
+    if (!isValidEmail(e)) { toast.error("Enter a valid email"); return false; }
+    if (participants.some((p) => p.email.toLowerCase() === e.toLowerCase())) {
+      setEmailDraft(""); return true;
+    }
+    setParticipants((prev) => [...prev, { email: e, sendInvite: true }]);
     setEmailDraft("");
+    return true;
   };
+  const addParticipant = () => addEmail(emailDraft);
 
   const create = useMutation({
     mutationFn: async () => {
