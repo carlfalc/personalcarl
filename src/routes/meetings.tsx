@@ -241,48 +241,79 @@ function MeetingsPage() {
           </Field>
 
           <Field label="Participants (emails)" className="sm:col-span-2">
-            <div className="flex gap-2">
-              <Input
-                type="email"
-                value={emailDraft}
-                onChange={(e) => setEmailDraft(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addParticipant(); } }}
-                placeholder="jane@gmail.com"
-              />
-              <Button type="button" variant="secondary" onClick={addParticipant}>
-                <Plus className="mr-1 h-4 w-4" /> Add
-              </Button>
-            </div>
-            {participants.length > 0 && (
-              <ul className="mt-2 space-y-1.5">
+            <div className="relative">
+              <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-input bg-background p-1.5 focus-within:ring-1 focus-within:ring-ring">
                 {participants.map((p, i) => (
-                  <li key={p.email} className="flex items-center gap-2 rounded-md bg-muted/40 px-2 py-1.5 text-sm">
-                    <Mail className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="flex-1 truncate">{p.email}</span>
-                    {isGmail(p.email) && (
-                      <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Checkbox
-                          checked={p.sendInvite}
-                          onCheckedChange={(v) => {
-                            const next = [...participants];
-                            next[i] = { ...next[i], sendInvite: v === true };
-                            setParticipants(next);
-                          }}
-                        />
-                        Send calendar invite
-                      </label>
-                    )}
-                    <Button
-                      type="button" variant="ghost" size="icon" className="h-6 w-6"
+                  <span
+                    key={p.email}
+                    className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs"
+                    title={p.sendInvite ? "Invite will be sent" : "No invite"}
+                  >
+                    <Mail className="h-3 w-3 text-muted-foreground" />
+                    {p.email}
+                    <button
+                      type="button"
+                      className="rounded hover:bg-muted-foreground/20"
                       onClick={() => setParticipants(participants.filter((_, j) => j !== i))}
                     >
-                      <X className="h-3.5 w-3.5 text-muted-foreground" />
-                    </Button>
-                  </li>
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
                 ))}
-              </ul>
-            )}
+                <input
+                  type="email"
+                  className="flex-1 min-w-[10rem] border-0 bg-transparent px-1 py-0.5 text-sm outline-none placeholder:text-muted-foreground"
+                  value={emailDraft}
+                  onChange={(e) => setEmailDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === "," || e.key === ";") {
+                      e.preventDefault();
+                      addParticipant();
+                    } else if (e.key === "Backspace" && emailDraft === "" && participants.length > 0) {
+                      setParticipants(participants.slice(0, -1));
+                    }
+                  }}
+                  onPaste={(e) => {
+                    const text = e.clipboardData.getData("text");
+                    if (/[,;\s]/.test(text)) {
+                      e.preventDefault();
+                      const parts = text.split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean);
+                      const next = [...participants];
+                      for (const p of parts) {
+                        if (!isValidEmail(p)) continue;
+                        if (next.some((x) => x.email.toLowerCase() === p.toLowerCase())) continue;
+                        next.push({ email: p, sendInvite: true });
+                      }
+                      setParticipants(next);
+                      setEmailDraft("");
+                    }
+                  }}
+                  onBlur={() => { if (emailDraft.trim()) addParticipant(); }}
+                  placeholder={participants.length === 0 ? "jane@example.com (Enter to add)" : ""}
+                />
+              </div>
+              {suggestions.length > 0 && emailDraft.trim() && (
+                <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-md border bg-popover shadow-md">
+                  {suggestions.map((s) => (
+                    <li key={s}>
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent"
+                        onMouseDown={(e) => { e.preventDefault(); addEmail(s); }}
+                      >
+                        <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                        {s}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Invites are sent automatically via your Google Calendar — recipients can accept in their own calendar.
+            </p>
           </Field>
+
 
           <Field label="Attachments" className="sm:col-span-2">
             <div className="flex items-center gap-2">
