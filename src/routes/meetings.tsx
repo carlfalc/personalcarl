@@ -44,11 +44,6 @@ type Participant = { email: string; sendInvite: boolean };
 const isValidEmail = (email: string) =>
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 
-const _unused = (email: string) => email; void _unused;
-
-const isValidEmail = (email: string) =>
-  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-
 function MeetingsPage() {
   useRealtimeTable("meetings", ["meetings"]);
   useRealtimeTable("meeting_documents", ["meeting-documents"]);
