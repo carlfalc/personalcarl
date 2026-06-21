@@ -158,15 +158,20 @@ function TrainingRosterPage() {
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      const [a, b, c] = await Promise.all([
+      const [a, b, c, d] = await Promise.all([
         supabase.from("roster_training").select("*").order("position").order("day"),
         supabase.from("roster_training_snapshots").select("id,saved_at,label,data").order("saved_at", { ascending: false }).limit(100),
         supabase.from("roster_training_meta").select("week_start_date,week_start_day").eq("id", 1).maybeSingle(),
+        supabase.from("roster_staff").select("staff_name").eq("roster_type", "staff"),
       ]);
       if (cancelled) return;
       if (a.data) setRows(a.data as Row[]);
       if (b.data) setSnapshots(b.data as Snapshot[]);
       if (c.data) setMeta({ date: c.data.week_start_date, day: c.data.week_start_day });
+      if (d.data) {
+        const names = Array.from(new Set((d.data as { staff_name: string }[]).map((x) => x.staff_name)));
+        setStaffRosterNames(names);
+      }
       setLoading(false);
     };
     load();
@@ -175,6 +180,7 @@ function TrainingRosterPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "roster_training" }, () => load())
       .on("postgres_changes", { event: "*", schema: "public", table: "roster_training_snapshots" }, () => load())
       .on("postgres_changes", { event: "*", schema: "public", table: "roster_training_meta" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "roster_staff" }, () => load())
       .subscribe();
     return () => {
       cancelled = true;
