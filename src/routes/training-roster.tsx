@@ -147,7 +147,29 @@ function buildHTML(weekDate: string | null, startDay: number | null, staff: stri
   const dateHtml = weekDate
     ? `<span>Pay week commencing ${prettyDate(weekDate)}</span>`
     : (startDay != null ? `<span>Pay week commencing ${DAY_ABBR[startDay]}</span>` : "");
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Training Roster</title><style>${STYLE}</style></head><body><div class="gh-wrap"><div class="gh-topbar"><div class="gh-brand"><h1>Glasshouse</h1><span>Training Roster</span>${dateHtml}</div></div><div class="gh-grid">${html}</div></div></body></html>`;
+  const EXPORT_STYLE = `
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:#fff;color:#1d1d1b;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;padding:10mm}
+.gh-wrap{max-width:none;margin:0}
+.gh-topbar{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:10px;border-bottom:2px solid #0d3a2c;padding-bottom:8px}
+.gh-brand{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.gh-brand h1{font-size:26px;font-weight:700;color:#0d3a2c;margin:0}
+.gh-brand span{font-size:14px;color:#5b5b55}
+.gh-grid{display:grid;grid-template-columns:110px repeat(7,minmax(0,1fr));gap:0;font-size:10.5px;width:100%}
+.gh-header{font-size:10.5px;font-weight:700;text-align:center;padding:6px 4px;text-transform:uppercase;letter-spacing:.3px;border:1px solid #0d3a2c;background:#0d3a2c;color:#fff}
+.gh-cell{padding:5px 5px;min-height:60px;display:flex;flex-direction:column;gap:3px;border:1px solid #0d3a2c;border-top:0;vertical-align:top;min-width:0}
+.gh-grid > .gh-header + .gh-header,.gh-grid > .gh-cell + .gh-cell{border-left:0}
+.gh-namecell{background:#F7F4EC;justify-content:center}
+.gh-name{font-weight:700;color:#0d3a2c;font-size:11.5px}
+.gh-train{display:flex;flex-direction:column;gap:1px;padding:2px 0;border-bottom:1px dotted #b9b9af}
+.gh-train:last-child{border-bottom:0}
+.gh-train .t{font-weight:700;font-size:10px;color:#0d3a2c}
+.gh-train .desc{font-size:10px;line-height:1.25;color:#0d3a2c;word-break:break-word}
+@page{size:A4 landscape;margin:8mm}
+@media print{body{padding:0}}
+`;
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Training Roster</title><style>${EXPORT_STYLE}</style></head><body><div class="gh-wrap"><div class="gh-topbar"><div class="gh-brand"><h1>Glasshouse</h1><span>Training Roster</span>${dateHtml}</div></div><div class="gh-grid">${html}</div></div></body></html>`;
 }
 
 function TrainingRosterPage() {
