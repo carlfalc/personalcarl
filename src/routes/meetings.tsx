@@ -27,6 +27,7 @@ type Meeting = {
   datetime: string;
   location: string | null;
   notes: string | null;
+  google_event_id: string | null;
 };
 
 type MeetingDoc = {
