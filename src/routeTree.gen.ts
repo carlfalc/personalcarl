@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TrainingRosterRouteImport } from './routes/training-roster'
 import { Route as TodosRouteImport } from './routes/todos'
 import { Route as TasksRouteImport } from './routes/tasks'
 import { Route as SignupRouteImport } from './routes/signup'
@@ -24,6 +25,11 @@ import { Route as DiaryRouteImport } from './routes/diary'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
 
+const TrainingRosterRoute = TrainingRosterRouteImport.update({
+  id: '/training-roster',
+  path: '/training-roster',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TodosRoute = TodosRouteImport.update({
   id: '/todos',
   path: '/todos',
@@ -110,6 +116,7 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/tasks': typeof TasksRoute
   '/todos': typeof TodosRoute
+  '/training-roster': typeof TrainingRosterRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -126,6 +133,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/tasks': typeof TasksRoute
   '/todos': typeof TodosRoute
+  '/training-roster': typeof TrainingRosterRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -143,6 +151,7 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/tasks': typeof TasksRoute
   '/todos': typeof TodosRoute
+  '/training-roster': typeof TrainingRosterRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -161,6 +170,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/tasks'
     | '/todos'
+    | '/training-roster'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -177,6 +187,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/tasks'
     | '/todos'
+    | '/training-roster'
   id:
     | '__root__'
     | '/'
@@ -193,6 +204,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/tasks'
     | '/todos'
+    | '/training-roster'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -210,10 +222,18 @@ export interface RootRouteChildren {
   SignupRoute: typeof SignupRoute
   TasksRoute: typeof TasksRoute
   TodosRoute: typeof TodosRoute
+  TrainingRosterRoute: typeof TrainingRosterRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/training-roster': {
+      id: '/training-roster'
+      path: '/training-roster'
+      fullPath: '/training-roster'
+      preLoaderRoute: typeof TrainingRosterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/todos': {
       id: '/todos'
       path: '/todos'
@@ -330,6 +350,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignupRoute: SignupRoute,
   TasksRoute: TasksRoute,
   TodosRoute: TodosRoute,
+  TrainingRosterRoute: TrainingRosterRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
