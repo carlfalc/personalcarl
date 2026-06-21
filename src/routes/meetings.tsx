@@ -41,8 +41,10 @@ type MeetingDoc = {
 
 type Participant = { email: string; sendInvite: boolean };
 
-const isGmail = (email: string) =>
-  /@(gmail\.com|googlemail\.com)$/i.test(email.trim());
+const isValidEmail = (email: string) =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+
+const _unused = (email: string) => email; void _unused;
 
 const isValidEmail = (email: string) =>
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
