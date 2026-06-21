@@ -401,6 +401,19 @@ function TrainingRosterPage() {
           <p className="gh-note">Loading training roster…</p>
         ) : (
           <>
+            {!staffView && clipboard && (
+              <div className="gh-clipbar">
+                <span className="gh-clipbar-label">📋 Copied:</span>
+                <span className="gh-clipbar-time">
+                  {fmt(clipboard.start_time)}–{fmt(clipboard.end_time)}
+                </span>
+                {clipboard.training_text && (
+                  <span className="gh-clipbar-text">{clipboard.training_text}</span>
+                )}
+                <span className="gh-clipbar-hint">— click any empty cell to paste</span>
+                <button className="gh-btn" onClick={() => setClipboard(null)}>Clear</button>
+              </div>
+            )}
             <div className="gh-scroll">
               <div className="gh-grid">
                 <div className="gh-header" />
@@ -418,6 +431,9 @@ function TrainingRosterPage() {
                     onAdd={openAdd}
                     onEdit={openEdit}
                     onDeleteStaff={deleteStaff}
+                    onCopy={copyEntry}
+                    onPaste={pasteInto}
+                    hasClipboard={!!clipboard}
                   />
                 ))}
               </div>
@@ -426,8 +442,9 @@ function TrainingRosterPage() {
             <p className="gh-note">
               {staffView
                 ? "Staff view — training sessions only. This is the version shared with staff."
-                : "Click + to add a training session · click an entry to edit · × on a name removes that person. Each cell can hold multiple sessions for that day."}
+                : "Click + to add a training session · click an entry to edit · ⧉ on an entry copies it (paste into any empty cell) · × on a name removes that person."}
             </p>
+
 
             {!staffView && (
               <div className="gh-snap-panel">
