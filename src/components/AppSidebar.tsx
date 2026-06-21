@@ -49,6 +49,7 @@ const items: Array<{
   { title: "About Me",  subtitle: "Profile & memory",           url: "/about",     icon: UserCircle2 },
   { title: "Schedules", subtitle: "Recurring AI briefings",     url: "/schedules", icon: Clock },
   { title: "Roster",    subtitle: "Glasshouse weekly roster",   url: "/roster",    icon: Users },
+  { title: "Training Roster", subtitle: "Weekly training schedule", url: "/training-roster", icon: Users },
   { title: "Settings",  subtitle: "Telegram & birthdays",       url: "/settings",  icon: SettingsIcon },
 ];
 
