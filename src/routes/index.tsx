@@ -329,7 +329,7 @@ function TodayPage() {
                     size="icon" variant="ghost"
                     className="h-7 w-7 text-emerald-600 hover:bg-emerald-50"
                     title="Mark completed"
-                    onClick={() => completeTask.mutate(t)}
+                    onClick={() => { setCompleting(t); setCompleteNote(""); }}
                   >
                     <Check className="h-4 w-4" />
                   </Button>
