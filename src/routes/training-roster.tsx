@@ -60,6 +60,16 @@ const STYLE = `
 .gh-name .xbtn{border:0;background:transparent;color:#b3261e;cursor:pointer;font-size:14px;line-height:1;padding:2px 4px;border-radius:4px}
 .gh-name .xbtn:hover{background:#fdeceb}
 .gh-train{background:#E1F5EE;color:#085041;border-radius:3px;padding:4px 6px;font-size:10px;font-weight:600;line-height:1.3;cursor:pointer;text-align:left;border:0;display:flex;flex-direction:column;gap:2px;width:100%}
+.gh-train-wrap{position:relative;width:100%}
+.gh-copybtn{position:absolute;top:2px;right:2px;border:0;background:rgba(255,255,255,.75);color:#0d3a2c;font-size:11px;line-height:1;padding:2px 4px;border-radius:3px;cursor:pointer;font-weight:700}
+.gh-copybtn:hover{background:#fff}
+.gh-paste{border:1px dashed #C9A961!important;background:#fff8e6!important;color:#0d3a2c!important;font-weight:700!important;font-size:10px!important}
+.gh-paste:hover{background:#fbeec5!important}
+.gh-clipbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#fff8e6;border:1px solid #C9A961;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#0d3a2c}
+.gh-clipbar-label{font-weight:700}
+.gh-clipbar-time{font-weight:600;background:#E1F5EE;color:#085041;padding:2px 6px;border-radius:3px}
+.gh-clipbar-text{color:#1d1d1b}
+.gh-clipbar-hint{color:#5b5b55;font-style:italic;flex:1;min-width:0}
 .gh-train:hover{opacity:.85}
 .gh-train .t{font-weight:700;white-space:nowrap}
 .gh-train .desc{font-weight:500;color:#0d3a2c;white-space:normal;word-break:break-word;font-size:10px;line-height:1.25}
