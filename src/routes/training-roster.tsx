@@ -154,6 +154,7 @@ function TrainingRosterPage() {
   const [mEnd, setMEnd] = useState("10:30");
   const [mText, setMText] = useState("");
   const [mNewName, setMNewName] = useState("");
+  const [clipboard, setClipboard] = useState<{ start_time: string; end_time: string; training_text: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
