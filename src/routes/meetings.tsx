@@ -10,11 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
+
 import { Trash2, Plus, MapPin, Clock, Paperclip, Upload, FileIcon, X, Mail, Pencil, Check } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { createCalendarEvent } from "@/lib/meetings.functions";
+import { createCalendarEvent, getEventRsvps } from "@/lib/meetings.functions";
 
 export const Route = createFileRoute("/meetings")({
   head: () => ({ meta: [{ title: "Meetings — Personal OS" }] }),
@@ -27,6 +27,7 @@ type Meeting = {
   datetime: string;
   location: string | null;
   notes: string | null;
+  google_event_id: string | null;
 };
 
 type MeetingDoc = {
@@ -39,9 +40,6 @@ type MeetingDoc = {
 };
 
 type Participant = { email: string; sendInvite: boolean };
-
-const isGmail = (email: string) =>
-  /@(gmail\.com|googlemail\.com)$/i.test(email.trim());
 
 const isValidEmail = (email: string) =>
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
@@ -77,15 +75,37 @@ function MeetingsPage() {
     },
   });
 
-  const addParticipant = () => {
-    const e = emailDraft.trim();
-    if (!isValidEmail(e)) { toast.error("Enter a valid email"); return; }
-    if (participants.some((p) => p.email.toLowerCase() === e.toLowerCase())) {
-      setEmailDraft(""); return;
+  // Distinct recent attendee emails harvested from past meeting notes ("Participants: a@x, b@y").
+  const recentEmails = (() => {
+    const set = new Set<string>();
+    for (const m of meetings) {
+      const line = (m.notes ?? "").match(/Participants:\s*([^\n]+)/i)?.[1] ?? "";
+      for (const part of line.split(/[,;\s]+/)) {
+        const e = part.trim();
+        if (isValidEmail(e)) set.add(e.toLowerCase());
+      }
     }
-    setParticipants([...participants, { email: e, sendInvite: isGmail(e) }]);
+    return [...set].sort();
+  })();
+
+  const suggestions = (() => {
+    const q = emailDraft.trim().toLowerCase();
+    if (q.length < 1) return [];
+    const taken = new Set(participants.map((p) => p.email.toLowerCase()));
+    return recentEmails.filter((e) => !taken.has(e) && e.includes(q)).slice(0, 6);
+  })();
+
+  const addEmail = (raw: string) => {
+    const e = raw.trim().replace(/[,;]$/, "");
+    if (!isValidEmail(e)) { toast.error("Enter a valid email"); return false; }
+    if (participants.some((p) => p.email.toLowerCase() === e.toLowerCase())) {
+      setEmailDraft(""); return true;
+    }
+    setParticipants((prev) => [...prev, { email: e, sendInvite: true }]);
     setEmailDraft("");
+    return true;
   };
+  const addParticipant = () => addEmail(emailDraft);
 
   const create = useMutation({
     mutationFn: async () => {
@@ -218,48 +238,79 @@ function MeetingsPage() {
           </Field>
 
           <Field label="Participants (emails)" className="sm:col-span-2">
-            <div className="flex gap-2">
-              <Input
-                type="email"
-                value={emailDraft}
-                onChange={(e) => setEmailDraft(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addParticipant(); } }}
-                placeholder="jane@gmail.com"
-              />
-              <Button type="button" variant="secondary" onClick={addParticipant}>
-                <Plus className="mr-1 h-4 w-4" /> Add
-              </Button>
-            </div>
-            {participants.length > 0 && (
-              <ul className="mt-2 space-y-1.5">
+            <div className="relative">
+              <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-input bg-background p-1.5 focus-within:ring-1 focus-within:ring-ring">
                 {participants.map((p, i) => (
-                  <li key={p.email} className="flex items-center gap-2 rounded-md bg-muted/40 px-2 py-1.5 text-sm">
-                    <Mail className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="flex-1 truncate">{p.email}</span>
-                    {isGmail(p.email) && (
-                      <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Checkbox
-                          checked={p.sendInvite}
-                          onCheckedChange={(v) => {
-                            const next = [...participants];
-                            next[i] = { ...next[i], sendInvite: v === true };
-                            setParticipants(next);
-                          }}
-                        />
-                        Send calendar invite
-                      </label>
-                    )}
-                    <Button
-                      type="button" variant="ghost" size="icon" className="h-6 w-6"
+                  <span
+                    key={p.email}
+                    className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs"
+                    title={p.sendInvite ? "Invite will be sent" : "No invite"}
+                  >
+                    <Mail className="h-3 w-3 text-muted-foreground" />
+                    {p.email}
+                    <button
+                      type="button"
+                      className="rounded hover:bg-muted-foreground/20"
                       onClick={() => setParticipants(participants.filter((_, j) => j !== i))}
                     >
-                      <X className="h-3.5 w-3.5 text-muted-foreground" />
-                    </Button>
-                  </li>
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
                 ))}
-              </ul>
-            )}
+                <input
+                  type="email"
+                  className="flex-1 min-w-[10rem] border-0 bg-transparent px-1 py-0.5 text-sm outline-none placeholder:text-muted-foreground"
+                  value={emailDraft}
+                  onChange={(e) => setEmailDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === "," || e.key === ";") {
+                      e.preventDefault();
+                      addParticipant();
+                    } else if (e.key === "Backspace" && emailDraft === "" && participants.length > 0) {
+                      setParticipants(participants.slice(0, -1));
+                    }
+                  }}
+                  onPaste={(e) => {
+                    const text = e.clipboardData.getData("text");
+                    if (/[,;\s]/.test(text)) {
+                      e.preventDefault();
+                      const parts = text.split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean);
+                      const next = [...participants];
+                      for (const p of parts) {
+                        if (!isValidEmail(p)) continue;
+                        if (next.some((x) => x.email.toLowerCase() === p.toLowerCase())) continue;
+                        next.push({ email: p, sendInvite: true });
+                      }
+                      setParticipants(next);
+                      setEmailDraft("");
+                    }
+                  }}
+                  onBlur={() => { if (emailDraft.trim()) addParticipant(); }}
+                  placeholder={participants.length === 0 ? "jane@example.com (Enter to add)" : ""}
+                />
+              </div>
+              {suggestions.length > 0 && emailDraft.trim() && (
+                <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-md border bg-popover shadow-md">
+                  {suggestions.map((s) => (
+                    <li key={s}>
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent"
+                        onMouseDown={(e) => { e.preventDefault(); addEmail(s); }}
+                      >
+                        <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                        {s}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Invites are sent automatically via your Google Calendar — recipients can accept in their own calendar.
+            </p>
           </Field>
+
 
           <Field label="Attachments" className="sm:col-span-2">
             <div className="flex items-center gap-2">
@@ -465,6 +516,7 @@ function MeetingCard({ m, docs, onDel }: { m: Meeting; docs: MeetingDoc[]; onDel
               {m.notes && (
                 <p className="mt-2 whitespace-pre-wrap text-sm text-foreground/80">{m.notes}</p>
               )}
+              {m.google_event_id && <RsvpBadges eventId={m.google_event_id} />}
             </>
           )}
         </div>
@@ -647,4 +699,50 @@ function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+const RSVP_META: Record<string, { label: string; cls: string; icon: string }> = {
+  accepted: { label: "Accepted", cls: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300", icon: "✓" },
+  declined: { label: "Declined", cls: "bg-red-500/15 text-red-700 dark:text-red-300", icon: "✗" },
+  tentative: { label: "Tentative", cls: "bg-amber-500/15 text-amber-700 dark:text-amber-300", icon: "?" },
+  needsAction: { label: "No response", cls: "bg-muted text-muted-foreground", icon: "…" },
+};
+
+function RsvpBadges({ eventId }: { eventId: string }) {
+  const getRsvps = useServerFn(getEventRsvps);
+  const { data, isLoading, refetch, isFetching } = useQuery({
+    queryKey: ["rsvps", eventId],
+    queryFn: () => getRsvps({ data: { eventId } }),
+    staleTime: 60_000,
+    refetchOnWindowFocus: true,
+  });
+  if (isLoading) return <div className="mt-2 text-xs text-muted-foreground">Loading RSVPs…</div>;
+  const attendees = data?.attendees ?? [];
+  if (attendees.length === 0) return null;
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      {attendees.map((a) => {
+        const meta = RSVP_META[a.responseStatus] ?? RSVP_META.needsAction;
+        return (
+          <span
+            key={a.email}
+            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${meta.cls}`}
+            title={`${meta.label}${a.displayName ? ` — ${a.displayName}` : ""}`}
+          >
+            <span>{meta.icon}</span>
+            {a.email}
+          </span>
+        );
+      })}
+      <button
+        type="button"
+        onClick={() => refetch()}
+        className="ml-1 text-xs text-muted-foreground hover:text-foreground"
+        title="Refresh RSVPs"
+        disabled={isFetching}
+      >
+        {isFetching ? "…" : "↻"}
+      </button>
+    </div>
+  );
 }

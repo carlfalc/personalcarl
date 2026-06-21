@@ -90,3 +90,28 @@ export const createCalendarEvent = createServerFn({ method: "POST" })
     const json = await res.json() as { id?: string };
     return { ok: true, eventId: json.id ?? null };
   });
+
+export const getEventRsvps = createServerFn({ method: "POST" })
+  .inputValidator((input) =>
+    z.object({ eventId: z.string().min(1).max(200) }).parse(input),
+  )
+  .handler(async ({ data }) => {
+    const res = await fetch(
+      `${GATEWAY}/calendars/primary/events/${encodeURIComponent(data.eventId)}`,
+      { headers: gcalHeaders() },
+    );
+    if (!res.ok) {
+      throw new Error(`Google Calendar get failed (${res.status}): ${(await res.text()).slice(0, 200)}`);
+    }
+    const json = (await res.json()) as {
+      attendees?: Array<{ email?: string; displayName?: string; responseStatus?: string }>;
+    };
+    return {
+      attendees: (json.attendees ?? []).map((a) => ({
+        email: a.email ?? "",
+        displayName: a.displayName ?? "",
+        responseStatus: (a.responseStatus ?? "needsAction") as
+          | "needsAction" | "declined" | "tentative" | "accepted",
+      })),
+    };
+  });
