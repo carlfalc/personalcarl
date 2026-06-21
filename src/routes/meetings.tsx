@@ -700,3 +700,49 @@ function formatSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
+
+const RSVP_META: Record<string, { label: string; cls: string; icon: string }> = {
+  accepted: { label: "Accepted", cls: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300", icon: "✓" },
+  declined: { label: "Declined", cls: "bg-red-500/15 text-red-700 dark:text-red-300", icon: "✗" },
+  tentative: { label: "Tentative", cls: "bg-amber-500/15 text-amber-700 dark:text-amber-300", icon: "?" },
+  needsAction: { label: "No response", cls: "bg-muted text-muted-foreground", icon: "…" },
+};
+
+function RsvpBadges({ eventId }: { eventId: string }) {
+  const getRsvps = useServerFn(getEventRsvps);
+  const { data, isLoading, refetch, isFetching } = useQuery({
+    queryKey: ["rsvps", eventId],
+    queryFn: () => getRsvps({ data: { eventId } }),
+    staleTime: 60_000,
+    refetchOnWindowFocus: true,
+  });
+  if (isLoading) return <div className="mt-2 text-xs text-muted-foreground">Loading RSVPs…</div>;
+  const attendees = data?.attendees ?? [];
+  if (attendees.length === 0) return null;
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      {attendees.map((a) => {
+        const meta = RSVP_META[a.responseStatus] ?? RSVP_META.needsAction;
+        return (
+          <span
+            key={a.email}
+            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${meta.cls}`}
+            title={`${meta.label}${a.displayName ? ` — ${a.displayName}` : ""}`}
+          >
+            <span>{meta.icon}</span>
+            {a.email}
+          </span>
+        );
+      })}
+      <button
+        type="button"
+        onClick={() => refetch()}
+        className="ml-1 text-xs text-muted-foreground hover:text-foreground"
+        title="Refresh RSVPs"
+        disabled={isFetching}
+      >
+        {isFetching ? "…" : "↻"}
+      </button>
+    </div>
+  );
+}
