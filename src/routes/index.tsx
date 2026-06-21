@@ -17,6 +17,10 @@ import {
   Plus, MessageSquarePlus, Mail, ShoppingCart, Trash2,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -88,22 +92,35 @@ function TodayPage() {
   });
 
   // ---- Task actions ----
+  const [completing, setCompleting] = useState<Entry | null>(null);
+  const [completeNote, setCompleteNote] = useState("");
+
   const completeTask = useMutation({
-    mutationFn: async (t: Entry) => {
+    mutationFn: async ({ t, note }: { t: Entry; note: string }) => {
+      const trimmed = note.trim();
       const { error } = await supabase.from("entries")
         .update({ status: "done" }).eq("id", t.id);
       if (error) throw error;
-      // Log to diary so completed work shows up in monthly review.
+      // Log to diary so completed work — and any closing comment — feed the
+      // AI agent's history and monthly review.
+      const content = trimmed
+        ? `✅ Completed task: ${t.content}\n📝 Comment: ${trimmed}`
+        : `✅ Completed task: ${t.content}`;
+      const tags = trimmed
+        ? ["completed", "task", "comment"]
+        : ["completed", "task"];
       await supabase.from("entries").insert({
         type: "diary",
-        content: `✅ Completed task: ${t.content}`,
-        tags: ["completed", "task"],
+        content,
+        tags,
         priority: 3,
         status: "logged",
       });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["today-entries"] });
+      setCompleting(null);
+      setCompleteNote("");
       toast.success("Task completed and logged to diary");
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
@@ -312,7 +329,7 @@ function TodayPage() {
                     size="icon" variant="ghost"
                     className="h-7 w-7 text-emerald-600 hover:bg-emerald-50"
                     title="Mark completed"
-                    onClick={() => completeTask.mutate(t)}
+                    onClick={() => { setCompleting(t); setCompleteNote(""); }}
                   >
                     <Check className="h-4 w-4" />
                   </Button>
@@ -530,6 +547,55 @@ function TodayPage() {
           </div>
         </SortableContext>
       </DndContext>
+
+      <Dialog
+        open={!!completing}
+        onOpenChange={(o) => { if (!o) { setCompleting(null); setCompleteNote(""); } }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Complete task</DialogTitle>
+            <DialogDescription>
+              Add any notes about how this was done, who was involved, or what was decided.
+              Comments are saved to your diary so the AI agent uses them as context.
+            </DialogDescription>
+          </DialogHeader>
+          {completing && (
+            <div className="space-y-3">
+              <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                {completing.content}
+              </div>
+              <Textarea
+                autoFocus
+                placeholder="Optional comment (people, outcomes, follow-ups)…"
+                value={completeNote}
+                onChange={(e) => setCompleteNote(e.target.value)}
+                rows={5}
+                onKeyDown={(e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && completing) {
+                    completeTask.mutate({ t: completing, note: completeNote });
+                  }
+                }}
+              />
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => { setCompleting(null); setCompleteNote(""); }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => completing && completeTask.mutate({ t: completing, note: completeNote })}
+              disabled={completeTask.isPending}
+              className="bg-emerald-600 hover:bg-emerald-700"
+            >
+              {completeTask.isPending ? "Saving…" : "Mark complete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
