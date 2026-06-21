@@ -300,7 +300,7 @@ function TrainingRosterPage() {
       end_time: clipboard.end_time,
       training_text: clipboard.training_text,
     });
-    // Clipboard stays active so you can keep pasting.
+    setClipboard(null);
   };
 
   const setWeekDate = async (d: string) => {
