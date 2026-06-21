@@ -273,6 +273,25 @@ function TrainingRosterPage() {
   const deleteStaff = async (name: string) => {
     await supabase.from("roster_training").delete().eq("staff_name", name);
   };
+  const copyEntry = (r: Row) => {
+    if (!r.start_time || !r.end_time) return;
+    setClipboard({ start_time: r.start_time, end_time: r.end_time, training_text: r.training_text || "" });
+  };
+  const pasteInto = async (staff: string, day: string) => {
+    if (!clipboard) return;
+    const pos =
+      rows.find((r) => r.staff_name === staff)?.position ??
+      (rows.length ? Math.max(...rows.map((r) => r.position)) + 1 : 0);
+    await supabase.from("roster_training").insert({
+      staff_name: staff,
+      day,
+      position: pos,
+      start_time: clipboard.start_time,
+      end_time: clipboard.end_time,
+      training_text: clipboard.training_text,
+    });
+    // Clipboard stays active so you can keep pasting.
+  };
 
   const setWeekDate = async (d: string) => {
     setMeta((m) => ({ ...m, date: d || null }));
