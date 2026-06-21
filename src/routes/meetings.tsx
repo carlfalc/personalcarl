@@ -14,7 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Trash2, Plus, MapPin, Clock, Paperclip, Upload, FileIcon, X, Mail, Pencil, Check } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { createCalendarEvent } from "@/lib/meetings.functions";
+import { createCalendarEvent, getEventRsvps } from "@/lib/meetings.functions";
 
 export const Route = createFileRoute("/meetings")({
   head: () => ({ meta: [{ title: "Meetings — Personal OS" }] }),
