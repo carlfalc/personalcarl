@@ -516,6 +516,7 @@ function MeetingCard({ m, docs, onDel }: { m: Meeting; docs: MeetingDoc[]; onDel
               {m.notes && (
                 <p className="mt-2 whitespace-pre-wrap text-sm text-foreground/80">{m.notes}</p>
               )}
+              {m.google_event_id && <RsvpBadges eventId={m.google_event_id} />}
             </>
           )}
         </div>
