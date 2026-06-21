@@ -60,6 +60,16 @@ const STYLE = `
 .gh-name .xbtn{border:0;background:transparent;color:#b3261e;cursor:pointer;font-size:14px;line-height:1;padding:2px 4px;border-radius:4px}
 .gh-name .xbtn:hover{background:#fdeceb}
 .gh-train{background:#E1F5EE;color:#085041;border-radius:3px;padding:4px 6px;font-size:10px;font-weight:600;line-height:1.3;cursor:pointer;text-align:left;border:0;display:flex;flex-direction:column;gap:2px;width:100%}
+.gh-train-wrap{position:relative;width:100%}
+.gh-copybtn{position:absolute;top:2px;right:2px;border:0;background:rgba(255,255,255,.75);color:#0d3a2c;font-size:11px;line-height:1;padding:2px 4px;border-radius:3px;cursor:pointer;font-weight:700}
+.gh-copybtn:hover{background:#fff}
+.gh-paste{border:1px dashed #C9A961!important;background:#fff8e6!important;color:#0d3a2c!important;font-weight:700!important;font-size:10px!important}
+.gh-paste:hover{background:#fbeec5!important}
+.gh-clipbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#fff8e6;border:1px solid #C9A961;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#0d3a2c}
+.gh-clipbar-label{font-weight:700}
+.gh-clipbar-time{font-weight:600;background:#E1F5EE;color:#085041;padding:2px 6px;border-radius:3px}
+.gh-clipbar-text{color:#1d1d1b}
+.gh-clipbar-hint{color:#5b5b55;font-style:italic;flex:1;min-width:0}
 .gh-train:hover{opacity:.85}
 .gh-train .t{font-weight:700;white-space:nowrap}
 .gh-train .desc{font-weight:500;color:#0d3a2c;white-space:normal;word-break:break-word;font-size:10px;line-height:1.25}
@@ -154,6 +164,7 @@ function TrainingRosterPage() {
   const [mEnd, setMEnd] = useState("10:30");
   const [mText, setMText] = useState("");
   const [mNewName, setMNewName] = useState("");
+  const [clipboard, setClipboard] = useState<{ start_time: string; end_time: string; training_text: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -272,6 +283,25 @@ function TrainingRosterPage() {
   const deleteStaff = async (name: string) => {
     await supabase.from("roster_training").delete().eq("staff_name", name);
   };
+  const copyEntry = (r: Row) => {
+    if (!r.start_time || !r.end_time) return;
+    setClipboard({ start_time: r.start_time, end_time: r.end_time, training_text: r.training_text || "" });
+  };
+  const pasteInto = async (staff: string, day: string) => {
+    if (!clipboard) return;
+    const pos =
+      rows.find((r) => r.staff_name === staff)?.position ??
+      (rows.length ? Math.max(...rows.map((r) => r.position)) + 1 : 0);
+    await supabase.from("roster_training").insert({
+      staff_name: staff,
+      day,
+      position: pos,
+      start_time: clipboard.start_time,
+      end_time: clipboard.end_time,
+      training_text: clipboard.training_text,
+    });
+    // Clipboard stays active so you can keep pasting.
+  };
 
   const setWeekDate = async (d: string) => {
     setMeta((m) => ({ ...m, date: d || null }));
@@ -381,6 +411,19 @@ function TrainingRosterPage() {
           <p className="gh-note">Loading training roster…</p>
         ) : (
           <>
+            {!staffView && clipboard && (
+              <div className="gh-clipbar">
+                <span className="gh-clipbar-label">📋 Copied:</span>
+                <span className="gh-clipbar-time">
+                  {fmt(clipboard.start_time)}–{fmt(clipboard.end_time)}
+                </span>
+                {clipboard.training_text && (
+                  <span className="gh-clipbar-text">{clipboard.training_text}</span>
+                )}
+                <span className="gh-clipbar-hint">— click any empty cell to paste</span>
+                <button className="gh-btn" onClick={() => setClipboard(null)}>Clear</button>
+              </div>
+            )}
             <div className="gh-scroll">
               <div className="gh-grid">
                 <div className="gh-header" />
@@ -398,6 +441,9 @@ function TrainingRosterPage() {
                     onAdd={openAdd}
                     onEdit={openEdit}
                     onDeleteStaff={deleteStaff}
+                    onCopy={copyEntry}
+                    onPaste={pasteInto}
+                    hasClipboard={!!clipboard}
                   />
                 ))}
               </div>
@@ -406,8 +452,9 @@ function TrainingRosterPage() {
             <p className="gh-note">
               {staffView
                 ? "Staff view — training sessions only. This is the version shared with staff."
-                : "Click + to add a training session · click an entry to edit · × on a name removes that person. Each cell can hold multiple sessions for that day."}
+                : "Click + to add a training session · click an entry to edit · ⧉ on an entry copies it (paste into any empty cell) · × on a name removes that person."}
             </p>
+
 
             {!staffView && (
               <div className="gh-snap-panel">
@@ -519,6 +566,9 @@ function TrainingRow({
   onAdd,
   onEdit,
   onDeleteStaff,
+  onCopy,
+  onPaste,
+  hasClipboard,
 }: {
   person: string;
   staffView: boolean;
@@ -527,6 +577,9 @@ function TrainingRow({
   onAdd: (staff: string, day: string) => void;
   onEdit: (id: string) => void;
   onDeleteStaff: (name: string) => void;
+  onCopy: (r: Row) => void;
+  onPaste: (staff: string, day: string) => void;
+  hasClipboard: boolean;
 }) {
   return (
     <>
@@ -551,21 +604,42 @@ function TrainingRow({
             {cellEntries.map((r) => {
               const time = r.start_time && r.end_time ? `${fmt(r.start_time)}–${fmt(r.end_time)}` : "";
               return (
-                <button
-                  key={r.id}
-                  className="gh-train"
-                  onClick={staffView ? undefined : () => onEdit(r.id)}
-                  disabled={staffView}
-                  type="button"
-                >
-                  {time && <span className="t">{time}</span>}
-                  {r.training_text && <span className="desc">{r.training_text}</span>}
-                  {!time && !r.training_text && <span className="desc">(empty)</span>}
-                </button>
+                <div key={r.id} className="gh-train-wrap">
+                  <button
+                    className="gh-train"
+                    onClick={staffView ? undefined : () => onEdit(r.id)}
+                    disabled={staffView}
+                    type="button"
+                  >
+                    {time && <span className="t">{time}</span>}
+                    {r.training_text && <span className="desc">{r.training_text}</span>}
+                    {!time && !r.training_text && <span className="desc">(empty)</span>}
+                  </button>
+                  {!staffView && r.start_time && r.end_time && (
+                    <button
+                      className="gh-copybtn"
+                      title="Copy this training (time + comment)"
+                      onClick={(e) => { e.stopPropagation(); onCopy(r); }}
+                      type="button"
+                    >
+                      ⧉
+                    </button>
+                  )}
+                </div>
               );
             })}
             {!staffView && (
-              <button className="gh-empty" onClick={() => onAdd(person, day)}>+</button>
+              hasClipboard ? (
+                <button
+                  className="gh-empty gh-paste"
+                  title="Paste copied training here"
+                  onClick={() => onPaste(person, day)}
+                >
+                  📋 Paste
+                </button>
+              ) : (
+                <button className="gh-empty" onClick={() => onAdd(person, day)}>+</button>
+              )
             )}
           </div>
         );
@@ -573,3 +647,4 @@ function TrainingRow({
     </>
   );
 }
+
