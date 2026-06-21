@@ -196,15 +196,12 @@ function TrainingRosterPage() {
   );
 
   const staffList = useMemo(() => {
-    const map = new Map<string, number>();
-    rows.forEach((r) => {
-      const cur = map.get(r.staff_name);
-      if (cur === undefined || r.position < cur) map.set(r.staff_name, r.position);
-    });
-    return Array.from(map.entries())
-      .sort((a, b) => a[0].localeCompare(b[0], undefined, { sensitivity: "base" }))
-      .map(([n]) => n);
-  }, [rows]);
+    const set = new Set<string>(staffRosterNames);
+    rows.forEach((r) => set.add(r.staff_name));
+    return Array.from(set).sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: "base" }),
+    );
+  }, [rows, staffRosterNames]);
 
   const staffView = mode === "staff";
 
