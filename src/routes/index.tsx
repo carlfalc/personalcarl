@@ -547,6 +547,55 @@ function TodayPage() {
           </div>
         </SortableContext>
       </DndContext>
+
+      <Dialog
+        open={!!completing}
+        onOpenChange={(o) => { if (!o) { setCompleting(null); setCompleteNote(""); } }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Complete task</DialogTitle>
+            <DialogDescription>
+              Add any notes about how this was done, who was involved, or what was decided.
+              Comments are saved to your diary so the AI agent uses them as context.
+            </DialogDescription>
+          </DialogHeader>
+          {completing && (
+            <div className="space-y-3">
+              <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                {completing.content}
+              </div>
+              <Textarea
+                autoFocus
+                placeholder="Optional comment (people, outcomes, follow-ups)…"
+                value={completeNote}
+                onChange={(e) => setCompleteNote(e.target.value)}
+                rows={5}
+                onKeyDown={(e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && completing) {
+                    completeTask.mutate({ t: completing, note: completeNote });
+                  }
+                }}
+              />
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => { setCompleting(null); setCompleteNote(""); }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => completing && completeTask.mutate({ t: completing, note: completeNote })}
+              disabled={completeTask.isPending}
+              className="bg-emerald-600 hover:bg-emerald-700"
+            >
+              {completeTask.isPending ? "Saving…" : "Mark complete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
