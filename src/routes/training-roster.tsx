@@ -142,6 +142,7 @@ function buildHTML(weekDate: string | null, startDay: number | null, staff: stri
 
 function TrainingRosterPage() {
   const [rows, setRows] = useState<Row[]>([]);
+  const [staffRosterNames, setStaffRosterNames] = useState<string[]>([]);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [meta, setMeta] = useState<MetaVal>({ date: null, day: null });
   const [loading, setLoading] = useState(true);
