@@ -92,22 +92,35 @@ function TodayPage() {
   });
 
   // ---- Task actions ----
+  const [completing, setCompleting] = useState<Entry | null>(null);
+  const [completeNote, setCompleteNote] = useState("");
+
   const completeTask = useMutation({
-    mutationFn: async (t: Entry) => {
+    mutationFn: async ({ t, note }: { t: Entry; note: string }) => {
+      const trimmed = note.trim();
       const { error } = await supabase.from("entries")
         .update({ status: "done" }).eq("id", t.id);
       if (error) throw error;
-      // Log to diary so completed work shows up in monthly review.
+      // Log to diary so completed work — and any closing comment — feed the
+      // AI agent's history and monthly review.
+      const content = trimmed
+        ? `✅ Completed task: ${t.content}\n📝 Comment: ${trimmed}`
+        : `✅ Completed task: ${t.content}`;
+      const tags = trimmed
+        ? ["completed", "task", "comment"]
+        : ["completed", "task"];
       await supabase.from("entries").insert({
         type: "diary",
-        content: `✅ Completed task: ${t.content}`,
-        tags: ["completed", "task"],
+        content,
+        tags,
         priority: 3,
         status: "logged",
       });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["today-entries"] });
+      setCompleting(null);
+      setCompleteNote("");
       toast.success("Task completed and logged to diary");
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
