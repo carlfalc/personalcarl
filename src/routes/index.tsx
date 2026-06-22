@@ -692,6 +692,66 @@ type GroceryItem = {
   created_at: string;
 };
 
+function QuickAddTask() {
+  const qc = useQueryClient();
+  const [title, setTitle] = useState("");
+  const [notes, setNotes] = useState("");
+  const [showNotes, setShowNotes] = useState(false);
+
+  const add = useMutation({
+    mutationFn: async () => {
+      const t = title.trim();
+      const n = notes.trim();
+      if (!t) return;
+      const content = n ? `${t}\n\n${n}` : t;
+      const { error } = await supabase.from("entries").insert({
+        type: "task",
+        content,
+        priority: 2,
+        status: "todo",
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setTitle("");
+      setNotes("");
+      setShowNotes(false);
+      qc.invalidateQueries({ queryKey: ["today-entries"] });
+      toast.success("Task added");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
+  });
+
+  return (
+    <form
+      onSubmit={(e) => { e.preventDefault(); add.mutate(); }}
+      className="mb-3 space-y-2"
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      <div className="flex gap-2">
+        <Input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onFocus={() => setShowNotes(true)}
+          placeholder="Add a task…"
+          className="h-9"
+        />
+        <Button type="submit" size="sm" disabled={!title.trim() || add.isPending}>
+          <Plus className="h-4 w-4" />
+        </Button>
+      </div>
+      {(showNotes || notes) && (
+        <Textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Comments (optional)…"
+          rows={2}
+        />
+      )}
+    </form>
+  );
+}
+
 function GroceryPanel() {
   useRealtimeTable("grocery_items", ["grocery-items"]);
   const qc = useQueryClient();
