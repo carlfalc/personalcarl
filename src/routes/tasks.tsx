@@ -76,6 +76,25 @@ function TasksPage() {
     },
   });
 
+  // History of completed tasks (with any closing comments) is logged into the
+  // diary on completion. We re-surface it here so the Tasks page becomes the
+  // canonical record, and so the AI agent's diary context already includes it.
+  useRealtimeTable("entries", ["task-history"]);
+  const { data: history = [] } = useQuery({
+    queryKey: ["task-history"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("entries")
+        .select("id, content, tags, created_at")
+        .eq("type", "diary")
+        .contains("tags", ["completed", "task"])
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      return data as { id: string; content: string; tags: string[]; created_at: string }[];
+    },
+  });
+
   const create = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.from("entries").insert({
