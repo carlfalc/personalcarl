@@ -146,6 +146,13 @@ export const getDayBriefing = createServerFn({ method: "POST" })
         notes: m.notes,
       }));
 
+    // Fetch LIVE market quotes from Yahoo Finance (free, no key required)
+    const liveMarkets = await fetchYahooQuotes([
+      { symbol: "RKLB", name: "Rocket Lab", displaySymbol: "RKLB" },
+      { symbol: "SPCX", name: "SpaceX (SPCX)", displaySymbol: "SPCX" },
+      { symbol: "GC=F", name: "Gold spot", displaySymbol: "XAUUSD" },
+    ]);
+
     const contextSummary = {
       date: data.date,
       weekday,
@@ -153,12 +160,15 @@ export const getDayBriefing = createServerFn({ method: "POST" })
       training: training.map((t) => `${t.name} ${t.start ?? ""}-${t.end ?? ""}: ${t.training_text ?? ""}`),
       tasks: tasks.map((t) => `P${t.priority ?? "?"} ${t.content}`),
       meetings: meetings.map((m) => `${m.datetime} — ${m.title}${m.location ? ` @ ${m.location}` : ""}`),
+      live_markets: liveMarkets,
     };
 
     const prompt = `Generate a daily briefing as strict JSON for ${data.date} (${weekday}).
 
 Context (already in the app, do not duplicate verbatim — reference it in the AI summary):
 ${JSON.stringify(contextSummary, null, 2)}
+
+The live_markets array above contains REAL last-traded prices fetched live from Yahoo Finance just now. Reference those numbers in the AI summary — do NOT invent prices from your training data.
 
 Required JSON shape — return EXACTLY these keys, nothing else:
 {
@@ -170,17 +180,14 @@ Required JSON shape — return EXACTLY these keys, nothing else:
     "wind": "e.g. 'WSW 15 km/h'",
     "location": "Whanganui, NZ"
   },
-  "markets": [
-    {"symbol":"RKLB","name":"Rocket Lab","price":"$XX.XX","change_pct":"+X.X%","direction":"up|down|flat","note":"closing/last known price; flag if approximate"},
-    {"symbol":"SPCE-PROXY","name":"SpaceX (proxy via DXYZ Destiny Tech100 or recent SPCX listing if applicable)","price":"$XX.XX","change_pct":"+X.X%","direction":"up|down|flat","note":"explain which proxy used; SpaceX direct listing if you know it"},
-    {"symbol":"XAUUSD","name":"Gold spot","price":"$X,XXX.XX/oz","change_pct":"+X.X%","direction":"up|down|flat","note":"last known spot"}
-  ],
   "horoscope": {
     "sagittarius": "2-3 sentence personalised daily horoscope for a Sagittarius male born 30 Nov 1972 in Whanganui NZ",
     "chinese_rat": "2-3 sentence Chinese zodiac daily for Rat (1972)"
   },
-  "ai_summary": "3-5 sentence intelligent summary tying together the day's roster, tasks, meetings, weather and any notable market/horoscope cues. Be specific, not generic."
-}`;
+  "ai_summary": "3-5 sentence intelligent summary tying together the day's roster, tasks, meetings, weather and the real market moves. Be specific, not generic."
+}
+
+(Markets are filled server-side from live_markets — do NOT include a markets key.)`;
 
     let ai: Record<string, unknown> = {};
     try {
@@ -189,11 +196,27 @@ Required JSON shape — return EXACTLY these keys, nothing else:
       console.error("Day briefing AI failed:", err);
       ai = {
         weather: { summary: "Weather unavailable", high_c: null, low_c: null, precipitation: "—", wind: "—", location: "Whanganui, NZ" },
-        markets: [],
         horoscope: { sagittarius: "Horoscope unavailable.", chinese_rat: "Horoscope unavailable." },
         ai_summary: "AI summary unavailable right now.",
       };
     }
+
+    // Build markets from LIVE data — never trust the LLM for prices.
+    const markets: DayBriefing["markets"] = liveMarkets.map((m) => {
+      const dir: "up" | "down" | "flat" =
+        m.changePct > 0.05 ? "up" : m.changePct < -0.05 ? "down" : "flat";
+      const priceStr = m.displaySymbol === "XAUUSD"
+        ? `$${m.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/oz`
+        : `$${m.price.toFixed(2)}`;
+      return {
+        symbol: m.displaySymbol,
+        name: m.name,
+        price: m.error ? "—" : priceStr,
+        change_pct: m.error ? "—" : `${m.changePct >= 0 ? "+" : ""}${m.changePct.toFixed(2)}%`,
+        direction: dir,
+        note: m.error ?? `${m.marketState ?? "last trade"} · prev close $${m.previousClose?.toFixed(2) ?? "—"}`,
+      };
+    });
 
     return {
       date: data.date,
@@ -201,7 +224,7 @@ Required JSON shape — return EXACTLY these keys, nothing else:
       weather: (ai.weather as DayBriefing["weather"]) ?? {
         summary: "—", high_c: null, low_c: null, precipitation: "—", wind: "—", location: "Whanganui, NZ",
       },
-      markets: Array.isArray(ai.markets) ? (ai.markets as DayBriefing["markets"]) : [],
+      markets,
       horoscope: (ai.horoscope as DayBriefing["horoscope"]) ?? { sagittarius: "—", chinese_rat: "—" },
       ai_summary: typeof ai.ai_summary === "string" ? ai.ai_summary : "—",
       roster,
@@ -211,3 +234,62 @@ Required JSON shape — return EXACTLY these keys, nothing else:
       generated_at: new Date().toISOString(),
     };
   });
+
+// ---------- Yahoo Finance live quote fetcher (no API key required) ----------
+type YahooQuote = {
+  symbol: string;
+  displaySymbol: string;
+  name: string;
+  price: number;
+  previousClose: number | null;
+  changePct: number;
+  marketState: string | null;
+  error?: string;
+};
+
+async function fetchYahooQuotes(
+  tickers: Array<{ symbol: string; name: string; displaySymbol: string }>,
+): Promise<YahooQuote[]> {
+  const symbols = tickers.map((t) => t.symbol).join(",");
+  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbols)}`;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36",
+        Accept: "application/json",
+      },
+    });
+    if (!res.ok) throw new Error(`Yahoo ${res.status}`);
+    const json = (await res.json()) as {
+      quoteResponse?: { result?: Array<Record<string, unknown>> };
+    };
+    const results = json.quoteResponse?.result ?? [];
+    return tickers.map((t) => {
+      const q = results.find((r) => r.symbol === t.symbol);
+      if (!q) {
+        return {
+          symbol: t.symbol, displaySymbol: t.displaySymbol, name: t.name,
+          price: 0, previousClose: null, changePct: 0, marketState: null,
+          error: "No data from Yahoo",
+        };
+      }
+      return {
+        symbol: t.symbol,
+        displaySymbol: t.displaySymbol,
+        name: t.name,
+        price: Number(q.regularMarketPrice ?? 0),
+        previousClose: q.regularMarketPreviousClose != null ? Number(q.regularMarketPreviousClose) : null,
+        changePct: Number(q.regularMarketChangePercent ?? 0),
+        marketState: (q.marketState as string) ?? null,
+      };
+    });
+  } catch (err) {
+    console.error("Yahoo Finance fetch failed:", err);
+    return tickers.map((t) => ({
+      symbol: t.symbol, displaySymbol: t.displaySymbol, name: t.name,
+      price: 0, previousClose: null, changePct: 0, marketState: null,
+      error: `Live quote unavailable (${(err as Error).message})`,
+    }));
+  }
+}
