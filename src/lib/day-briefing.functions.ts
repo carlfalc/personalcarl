@@ -80,6 +80,7 @@ export const getDayBriefing = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }): Promise<DayBriefing> => {
     const { supabase, userId } = context;
+    void userId;
     const dateObj = new Date(data.date + "T00:00:00");
     const weekday = DAY_NAMES[dateObj.getDay()];
     const dayStart = new Date(data.date + "T00:00:00").toISOString();
