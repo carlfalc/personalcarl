@@ -350,3 +350,81 @@ function PriorityDot({ p }: { p: number }) {
     p === 1 ? "bg-destructive" : p === 2 ? "bg-primary" : "bg-muted-foreground/40";
   return <div className={`h-2 w-2 shrink-0 rounded-full ${color}`} />;
 }
+
+type HistoryItem = { id: string; content: string; tags: string[]; created_at: string };
+
+function CompletedHistory({ items }: { items: HistoryItem[] }) {
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  if (items.length === 0) return null;
+
+  // Diary entries are formatted as:
+  //   ✅ Completed task: <task content>
+  //   📝 Comment: <comment>
+  const parsed = items.map((it) => {
+    const lines = it.content.split("\n");
+    const titleLine = lines[0]?.replace(/^✅\s*Completed task:\s*/i, "") ?? "";
+    const commentIdx = lines.findIndex((l) => l.startsWith("📝"));
+    const taskNotes = commentIdx > 1
+      ? lines.slice(1, commentIdx).join("\n").trim()
+      : "";
+    const comment = commentIdx >= 0
+      ? lines.slice(commentIdx).join("\n").replace(/^📝\s*Comment:\s*/i, "").trim()
+      : "";
+    return {
+      id: it.id,
+      created_at: it.created_at,
+      title: titleLine.trim(),
+      taskNotes,
+      comment,
+      hasComment: it.tags?.includes("comment") || !!comment,
+    };
+  });
+
+  return (
+    <div className="mt-10">
+      <h2 className="mb-3 text-sm font-semibold text-muted-foreground">
+        Completion history ({parsed.length})
+      </h2>
+      <div className="space-y-2">
+        {parsed.map((h) => {
+          const isOpen = !!open[h.id];
+          const canExpand = h.hasComment || !!h.taskNotes;
+          return (
+            <Card key={h.id} className="p-3 shadow-sm">
+              <button
+                type="button"
+                className="flex w-full items-center gap-3 text-left"
+                onClick={() => canExpand && setOpen((p) => ({ ...p, [h.id]: !isOpen }))}
+              >
+                <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
+                <span className="flex-1 truncate text-sm">{h.title}</span>
+                {h.hasComment && (
+                  <Badge variant="outline" className="text-[10px]">comment</Badge>
+                )}
+                <span className="text-[11px] text-muted-foreground tabular-nums">
+                  {format(new Date(h.created_at), "d MMM HH:mm")}
+                </span>
+              </button>
+              {isOpen && (
+                <div className="mt-2 ml-5 space-y-2 text-xs">
+                  {h.taskNotes && (
+                    <p className="whitespace-pre-wrap text-muted-foreground">
+                      <span className="font-semibold">Task notes: </span>
+                      {h.taskNotes}
+                    </p>
+                  )}
+                  {h.comment && (
+                    <p className="whitespace-pre-wrap rounded-md bg-muted/40 p-2">
+                      <span className="font-semibold">Closing comment: </span>
+                      {h.comment}
+                    </p>
+                  )}
+                </div>
+              )}
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
