@@ -291,6 +291,8 @@ function TasksPage() {
         })}
       </div>
 
+      <CompletedHistory items={history} />
+
       <Dialog
         open={!!completing}
         onOpenChange={(o) => { if (!o) { setCompleting(null); setCompleteNote(""); } }}
