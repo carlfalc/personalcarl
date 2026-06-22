@@ -89,12 +89,10 @@ export const getDayBriefing = createServerFn({ method: "POST" })
       supabase
         .from("roster_staff")
         .select("staff_name,day,start_time,end_time,is_off,roster_type")
-        .eq("user_id", userId)
         .eq("day", weekday),
       supabase
         .from("roster_training")
         .select("staff_name,day,start_time,end_time,training_text")
-        .eq("user_id", userId)
         .eq("day", weekday),
       supabase
         .from("entries")
