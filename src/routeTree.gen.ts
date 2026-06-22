@@ -24,6 +24,7 @@ import { Route as EmailRouteImport } from './routes/email'
 import { Route as DiaryRouteImport } from './routes/diary'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiPublicHooksP1TaskNotifierRouteImport } from './routes/api/public/hooks/p1-task-notifier'
 
 const TrainingRosterRoute = TrainingRosterRouteImport.update({
   id: '/training-roster',
@@ -100,6 +101,12 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicHooksP1TaskNotifierRoute =
+  ApiPublicHooksP1TaskNotifierRouteImport.update({
+    id: '/api/public/hooks/p1-task-notifier',
+    path: '/api/public/hooks/p1-task-notifier',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -117,6 +124,7 @@ export interface FileRoutesByFullPath {
   '/tasks': typeof TasksRoute
   '/todos': typeof TodosRoute
   '/training-roster': typeof TrainingRosterRoute
+  '/api/public/hooks/p1-task-notifier': typeof ApiPublicHooksP1TaskNotifierRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -134,6 +142,7 @@ export interface FileRoutesByTo {
   '/tasks': typeof TasksRoute
   '/todos': typeof TodosRoute
   '/training-roster': typeof TrainingRosterRoute
+  '/api/public/hooks/p1-task-notifier': typeof ApiPublicHooksP1TaskNotifierRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -152,6 +161,7 @@ export interface FileRoutesById {
   '/tasks': typeof TasksRoute
   '/todos': typeof TodosRoute
   '/training-roster': typeof TrainingRosterRoute
+  '/api/public/hooks/p1-task-notifier': typeof ApiPublicHooksP1TaskNotifierRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -171,6 +181,7 @@ export interface FileRouteTypes {
     | '/tasks'
     | '/todos'
     | '/training-roster'
+    | '/api/public/hooks/p1-task-notifier'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -188,6 +199,7 @@ export interface FileRouteTypes {
     | '/tasks'
     | '/todos'
     | '/training-roster'
+    | '/api/public/hooks/p1-task-notifier'
   id:
     | '__root__'
     | '/'
@@ -205,6 +217,7 @@ export interface FileRouteTypes {
     | '/tasks'
     | '/todos'
     | '/training-roster'
+    | '/api/public/hooks/p1-task-notifier'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -223,6 +236,7 @@ export interface RootRouteChildren {
   TasksRoute: typeof TasksRoute
   TodosRoute: typeof TodosRoute
   TrainingRosterRoute: typeof TrainingRosterRoute
+  ApiPublicHooksP1TaskNotifierRoute: typeof ApiPublicHooksP1TaskNotifierRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -332,6 +346,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/p1-task-notifier': {
+      id: '/api/public/hooks/p1-task-notifier'
+      path: '/api/public/hooks/p1-task-notifier'
+      fullPath: '/api/public/hooks/p1-task-notifier'
+      preLoaderRoute: typeof ApiPublicHooksP1TaskNotifierRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -351,6 +372,7 @@ const rootRouteChildren: RootRouteChildren = {
   TasksRoute: TasksRoute,
   TodosRoute: TodosRoute,
   TrainingRosterRoute: TrainingRosterRoute,
+  ApiPublicHooksP1TaskNotifierRoute: ApiPublicHooksP1TaskNotifierRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
