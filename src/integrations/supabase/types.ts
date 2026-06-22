@@ -661,6 +661,29 @@ export type Database = {
         }
         Relationships: []
       }
+      task_notifications: {
+        Row: {
+          entry_id: string
+          last_sent_at: string
+        }
+        Insert: {
+          entry_id: string
+          last_sent_at?: string
+        }
+        Update: {
+          entry_id?: string
+          last_sent_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_notifications_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: true
+            referencedRelation: "entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
