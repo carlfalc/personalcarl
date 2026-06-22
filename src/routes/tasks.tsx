@@ -6,6 +6,7 @@ import { useRealtimeTable } from "@/hooks/useRealtimeTable";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -15,6 +16,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
 import { Trash2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -33,13 +37,31 @@ type Task = {
   created_at: string;
 };
 
+// Tasks store the title on the first line and any optional comment in the
+// remainder. Keeping it inside `content` means it shows up everywhere the
+// task is rendered without a schema change.
+function splitTask(content: string) {
+  const [title, ...rest] = content.split("\n");
+  return { title: title ?? "", notes: rest.join("\n").trim() };
+}
+function joinTask(title: string, notes: string) {
+  const t = title.trim();
+  const n = notes.trim();
+  return n ? `${t}\n\n${n}` : t;
+}
+
 function TasksPage() {
   useRealtimeTable("entries", ["tasks"]);
   const qc = useQueryClient();
-  const [content, setContent] = useState("");
+  const [title, setTitle] = useState("");
+  const [notes, setNotes] = useState("");
   const [priority, setPriority] = useState("2");
   const [filter, setFilter] = useState<"all" | "todo" | "doing" | "done">("all");
   const [sort, setSort] = useState<"priority" | "due" | "created">("created");
+
+  // Completion dialog — mirrors the dashboard so notes feed the diary/AI history.
+  const [completing, setCompleting] = useState<Task | null>(null);
+  const [completeNote, setCompleteNote] = useState("");
 
   const { data: tasks = [] } = useQuery({
     queryKey: ["tasks"],
@@ -58,14 +80,15 @@ function TasksPage() {
     mutationFn: async () => {
       const { error } = await supabase.from("entries").insert({
         type: "task",
-        content: content.trim(),
+        content: joinTask(title, notes),
         priority: parseInt(priority),
         status: "todo",
       });
       if (error) throw error;
     },
     onSuccess: () => {
-      setContent("");
+      setTitle("");
+      setNotes("");
       qc.invalidateQueries({ queryKey: ["tasks"] });
     },
     onError: (e) => toast.error(e.message),
@@ -77,6 +100,35 @@ function TasksPage() {
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
+  });
+
+  const complete = useMutation({
+    mutationFn: async ({ t, note }: { t: Task; note: string }) => {
+      const trimmed = note.trim();
+      const { error } = await supabase.from("entries")
+        .update({ status: "done" }).eq("id", t.id);
+      if (error) throw error;
+      const content = trimmed
+        ? `✅ Completed task: ${t.content}\n📝 Comment: ${trimmed}`
+        : `✅ Completed task: ${t.content}`;
+      const tags = trimmed
+        ? ["completed", "task", "comment"]
+        : ["completed", "task"];
+      await supabase.from("entries").insert({
+        type: "diary",
+        content,
+        tags,
+        priority: 3,
+        status: "logged",
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      setCompleting(null);
+      setCompleteNote("");
+      toast.success("Task completed and logged to diary");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
 
   const del = useMutation({
@@ -107,29 +159,37 @@ function TasksPage() {
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (content.trim()) create.mutate();
+            if (title.trim()) create.mutate();
           }}
-          className="flex flex-wrap gap-2"
+          className="space-y-2"
         >
-          <Input
-            placeholder="What needs doing?"
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            className="flex-1 min-w-[200px]"
+          <div className="flex flex-wrap gap-2">
+            <Input
+              placeholder="What needs doing?"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="flex-1 min-w-[200px]"
+            />
+            <Select value={priority} onValueChange={setPriority}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">High</SelectItem>
+                <SelectItem value="2">Medium</SelectItem>
+                <SelectItem value="3">Low</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button type="submit" disabled={!title.trim()}>
+              <Plus className="mr-1 h-4 w-4" /> Add
+            </Button>
+          </div>
+          <Textarea
+            placeholder="Comments (optional) — context, people, links…"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
           />
-          <Select value={priority} onValueChange={setPriority}>
-            <SelectTrigger className="w-32">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="1">High</SelectItem>
-              <SelectItem value="2">Medium</SelectItem>
-              <SelectItem value="3">Low</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button type="submit" disabled={!content.trim()}>
-            <Plus className="mr-1 h-4 w-4" /> Add
-          </Button>
         </form>
       </Card>
 
@@ -159,40 +219,107 @@ function TasksPage() {
             Nothing here. Add a task above.
           </p>
         )}
-        {visible.map((t) => (
-          <Card key={t.id} className="flex items-center gap-3 p-3 shadow-sm transition hover:shadow-md">
-            <PriorityDot p={t.priority} />
-            <Input
-              defaultValue={t.content}
-              onBlur={(e) => {
-                if (e.target.value !== t.content) {
-                  update.mutate({ id: t.id, patch: { content: e.target.value } });
-                }
-              }}
-              className="flex-1 border-none bg-transparent shadow-none focus-visible:ring-0"
-            />
-            {t.due_date && (
-              <Badge variant="outline" className="text-[10px]">
-                {format(new Date(t.due_date), "d MMM")}
-              </Badge>
-            )}
-            <Select
-              value={t.status}
-              onValueChange={(v) => update.mutate({ id: t.id, patch: { status: v } })}
-            >
-              <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todo">To do</SelectItem>
-                <SelectItem value="doing">Doing</SelectItem>
-                <SelectItem value="done">Done</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button variant="ghost" size="icon" onClick={() => del.mutate(t.id)}>
-              <Trash2 className="h-4 w-4 text-muted-foreground" />
-            </Button>
-          </Card>
-        ))}
+        {visible.map((t) => {
+          const { title: tTitle, notes: tNotes } = splitTask(t.content);
+          return (
+            <Card key={t.id} className="p-3 shadow-sm transition hover:shadow-md">
+              <div className="flex items-center gap-3">
+                <PriorityDot p={t.priority} />
+                <Input
+                  defaultValue={tTitle}
+                  onBlur={(e) => {
+                    const next = joinTask(e.target.value, tNotes);
+                    if (next !== t.content) {
+                      update.mutate({ id: t.id, patch: { content: next } });
+                    }
+                  }}
+                  className="flex-1 border-none bg-transparent shadow-none focus-visible:ring-0"
+                />
+                {t.due_date && (
+                  <Badge variant="outline" className="text-[10px]">
+                    {format(new Date(t.due_date), "d MMM")}
+                  </Badge>
+                )}
+                <Select
+                  value={t.status}
+                  onValueChange={(v) => {
+                    if (v === "done" && t.status !== "done") {
+                      setCompleting(t);
+                      setCompleteNote("");
+                    } else {
+                      update.mutate({ id: t.id, patch: { status: v } });
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todo">To do</SelectItem>
+                    <SelectItem value="doing">Doing</SelectItem>
+                    <SelectItem value="done">Done</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button variant="ghost" size="icon" onClick={() => del.mutate(t.id)}>
+                  <Trash2 className="h-4 w-4 text-muted-foreground" />
+                </Button>
+              </div>
+              {tNotes && (
+                <p className="mt-2 ml-5 whitespace-pre-wrap text-xs text-muted-foreground">
+                  {tNotes}
+                </p>
+              )}
+            </Card>
+          );
+        })}
       </div>
+
+      <Dialog
+        open={!!completing}
+        onOpenChange={(o) => { if (!o) { setCompleting(null); setCompleteNote(""); } }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Complete task</DialogTitle>
+            <DialogDescription>
+              Add any notes about how this was done, who was involved, or what was decided.
+              Comments are saved to your diary so the AI agent uses them as context.
+            </DialogDescription>
+          </DialogHeader>
+          {completing && (
+            <div className="space-y-3">
+              <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                {completing.content}
+              </div>
+              <Textarea
+                autoFocus
+                placeholder="Optional comment (people, outcomes, follow-ups)…"
+                value={completeNote}
+                onChange={(e) => setCompleteNote(e.target.value)}
+                rows={5}
+                onKeyDown={(e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && completing) {
+                    complete.mutate({ t: completing, note: completeNote });
+                  }
+                }}
+              />
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => { setCompleting(null); setCompleteNote(""); }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => completing && complete.mutate({ t: completing, note: completeNote })}
+              disabled={complete.isPending}
+              className="bg-emerald-600 hover:bg-emerald-700"
+            >
+              {complete.isPending ? "Saving…" : "Mark complete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
