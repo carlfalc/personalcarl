@@ -299,51 +299,63 @@ function TodayPage() {
 
   const tiles: Record<string, React.ReactNode> = {
     tasks: (
-      <Panel title="Today's Tasks" emoji="✅" href="/tasks" addHref="/tasks">
+      <Panel title="Today's Tasks" emoji="✅" href="/tasks">
+        <QuickAddTask />
         {todaysTasks.length === 0 ? (
           <Empty>No tasks. Enjoy the quiet.</Empty>
         ) : (
           <div className="divide-y divide-border/60">
-            {todaysTasks.map((t) => (
-              <div key={t.id} className="flex items-center gap-3 py-3 text-sm">
-                <span className="flex-1 truncate">{t.content}</span>
-                <div onPointerDown={(e) => e.stopPropagation()}>
-                  <Select
-                    value={String(t.priority ?? 3)}
-                    onValueChange={(v) => updatePriority.mutate({ id: t.id, priority: parseInt(v) })}
-                  >
-                    <SelectTrigger className="h-6 w-[58px] px-2 py-0 text-[10px] font-semibold">
-                      <SelectValue>P{t.priority ?? 3}</SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">P1 — Highest</SelectItem>
-                      <SelectItem value="2">P2 — High</SelectItem>
-                      <SelectItem value="3">P3 — Medium</SelectItem>
-                      <SelectItem value="4">P4 — Low</SelectItem>
-                      <SelectItem value="5">P5 — Lowest</SelectItem>
-                    </SelectContent>
-                  </Select>
+            {todaysTasks.map((t) => {
+              const [tTitle, ...rest] = (t.content ?? "").split("\n");
+              const tNotes = rest.join("\n").trim();
+              return (
+                <div key={t.id} className="py-3 text-sm">
+                  <div className="flex items-center gap-3">
+                    <span className="flex-1 truncate">{tTitle}</span>
+                    <div onPointerDown={(e) => e.stopPropagation()}>
+                      <Select
+                        value={String(t.priority ?? 3)}
+                        onValueChange={(v) => updatePriority.mutate({ id: t.id, priority: parseInt(v) })}
+                      >
+                        <SelectTrigger className="h-6 w-[58px] px-2 py-0 text-[10px] font-semibold">
+                          <SelectValue>P{t.priority ?? 3}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">P1 — Highest</SelectItem>
+                          <SelectItem value="2">P2 — High</SelectItem>
+                          <SelectItem value="3">P3 — Medium</SelectItem>
+                          <SelectItem value="4">P4 — Low</SelectItem>
+                          <SelectItem value="5">P5 — Lowest</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-1" onPointerDown={(e) => e.stopPropagation()}>
+                      <Button
+                        size="icon" variant="ghost"
+                        className="h-7 w-7 text-emerald-600 hover:bg-emerald-50"
+                        title="Mark completed"
+                        onClick={() => { setCompleting(t); setCompleteNote(""); }}
+                      >
+                        <Check className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon" variant="ghost"
+                        className="h-7 w-7 text-muted-foreground hover:bg-red-50 hover:text-red-600"
+                        title="Delete (not required)"
+                        onClick={() => deleteTask.mutate(t)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  {tNotes && (
+                    <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-xs text-muted-foreground">
+                      {tNotes}
+                    </p>
+                  )}
                 </div>
-                <div className="flex items-center gap-1" onPointerDown={(e) => e.stopPropagation()}>
-                  <Button
-                    size="icon" variant="ghost"
-                    className="h-7 w-7 text-emerald-600 hover:bg-emerald-50"
-                    title="Mark completed"
-                    onClick={() => { setCompleting(t); setCompleteNote(""); }}
-                  >
-                    <Check className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    size="icon" variant="ghost"
-                    className="h-7 w-7 text-muted-foreground hover:bg-red-50 hover:text-red-600"
-                    title="Delete (not required)"
-                    onClick={() => deleteTask.mutate(t)}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </Panel>
@@ -679,6 +691,66 @@ type GroceryItem = {
   checked: boolean;
   created_at: string;
 };
+
+function QuickAddTask() {
+  const qc = useQueryClient();
+  const [title, setTitle] = useState("");
+  const [notes, setNotes] = useState("");
+  const [showNotes, setShowNotes] = useState(false);
+
+  const add = useMutation({
+    mutationFn: async () => {
+      const t = title.trim();
+      const n = notes.trim();
+      if (!t) return;
+      const content = n ? `${t}\n\n${n}` : t;
+      const { error } = await supabase.from("entries").insert({
+        type: "task",
+        content,
+        priority: 2,
+        status: "todo",
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setTitle("");
+      setNotes("");
+      setShowNotes(false);
+      qc.invalidateQueries({ queryKey: ["today-entries"] });
+      toast.success("Task added");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
+  });
+
+  return (
+    <form
+      onSubmit={(e) => { e.preventDefault(); add.mutate(); }}
+      className="mb-3 space-y-2"
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      <div className="flex gap-2">
+        <Input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onFocus={() => setShowNotes(true)}
+          placeholder="Add a task…"
+          className="h-9"
+        />
+        <Button type="submit" size="sm" disabled={!title.trim() || add.isPending}>
+          <Plus className="h-4 w-4" />
+        </Button>
+      </div>
+      {(showNotes || notes) && (
+        <Textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Comments (optional)…"
+          rows={2}
+        />
+      )}
+    </form>
+  );
+}
 
 function GroceryPanel() {
   useRealtimeTable("grocery_items", ["grocery-items"]);
