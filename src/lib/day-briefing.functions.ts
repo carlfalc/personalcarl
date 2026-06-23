@@ -243,11 +243,15 @@ Required JSON shape — return EXACTLY these keys, nothing else:
   });
 
 // ---------- Live quote fetcher with DB cache fallback ----------
-type SupabaseClientLike = {
-  from: (table: string) => {
-    select: (cols: string) => { in: (col: string, vals: string[]) => Promise<{ data: unknown; error: unknown }> };
-    upsert: (rows: unknown[], opts?: unknown) => Promise<{ error: unknown }>;
-  };
+type MarketCacheRow = {
+  symbol: string;
+  display_symbol: string;
+  name: string;
+  price: number;
+  previous_close: number | null;
+  change_pct: number | null;
+  market_state: string | null;
+  fetched_at: string;
 };
 
 type MarketQuote = {
