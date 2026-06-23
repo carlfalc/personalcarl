@@ -146,12 +146,16 @@ export const getDayBriefing = createServerFn({ method: "POST" })
         notes: m.notes,
       }));
 
-    // Fetch LIVE market quotes from Yahoo Finance (free, no key required)
-    const liveMarkets = await fetchYahooQuotes([
-      { symbol: "RKLB", name: "Rocket Lab", displaySymbol: "RKLB" },
-      { symbol: "SPCX", name: "SpaceX (SPCX)", displaySymbol: "SPCX" },
-      { symbol: "GC=F", name: "Gold spot", displaySymbol: "XAUUSD" },
-    ]);
+    // Fetch LIVE market quotes (Yahoo chart v8 endpoint — works without auth).
+    // Falls back to the DB cache so we always show a last-known price.
+    const liveMarkets = await fetchMarketQuotes(
+      [
+        { symbol: "RKLB", name: "Rocket Lab", displaySymbol: "RKLB" },
+        { symbol: "SPCX", name: "SpaceX (SPCX)", displaySymbol: "SPCX" },
+        { symbol: "GC=F", name: "Gold spot", displaySymbol: "XAUUSD" },
+      ],
+      supabase,
+    );
 
     const contextSummary = {
       date: data.date,
@@ -208,13 +212,16 @@ Required JSON shape — return EXACTLY these keys, nothing else:
       const priceStr = m.displaySymbol === "XAUUSD"
         ? `$${m.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/oz`
         : `$${m.price.toFixed(2)}`;
+      const cachedNote = m.cached
+        ? `last known · cached ${m.fetchedAt ? new Date(m.fetchedAt).toLocaleString("en-NZ", { timeZone: "Pacific/Auckland", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" }) : ""}`
+        : `${m.marketState ?? "last trade"} · prev close $${m.previousClose?.toFixed(2) ?? "—"}`;
       return {
         symbol: m.displaySymbol,
         name: m.name,
-        price: m.error ? "—" : priceStr,
-        change_pct: m.error ? "—" : `${m.changePct >= 0 ? "+" : ""}${m.changePct.toFixed(2)}%`,
+        price: m.price > 0 ? priceStr : "—",
+        change_pct: m.price > 0 ? `${m.changePct >= 0 ? "+" : ""}${m.changePct.toFixed(2)}%` : "—",
         direction: dir,
-        note: m.error ?? `${m.marketState ?? "last trade"} · prev close $${m.previousClose?.toFixed(2) ?? "—"}`,
+        note: m.error ?? cachedNote,
       };
     });
 
@@ -235,8 +242,19 @@ Required JSON shape — return EXACTLY these keys, nothing else:
     };
   });
 
-// ---------- Yahoo Finance live quote fetcher (no API key required) ----------
-type YahooQuote = {
+// ---------- Live quote fetcher with DB cache fallback ----------
+type MarketCacheRow = {
+  symbol: string;
+  display_symbol: string;
+  name: string;
+  price: number;
+  previous_close: number | null;
+  change_pct: number | null;
+  market_state: string | null;
+  fetched_at: string;
+};
+
+type MarketQuote = {
   symbol: string;
   displaySymbol: string;
   name: string;
@@ -244,14 +262,15 @@ type YahooQuote = {
   previousClose: number | null;
   changePct: number;
   marketState: string | null;
+  cached?: boolean;
+  fetchedAt?: string;
   error?: string;
 };
 
-async function fetchYahooQuotes(
-  tickers: Array<{ symbol: string; name: string; displaySymbol: string }>,
-): Promise<YahooQuote[]> {
-  const symbols = tickers.map((t) => t.symbol).join(",");
-  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbols)}`;
+async function fetchOneYahooChart(
+  symbol: string,
+): Promise<{ price: number; previousClose: number | null; changePct: number; marketState: string | null } | null> {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
   try {
     const res = await fetch(url, {
       headers: {
@@ -260,36 +279,92 @@ async function fetchYahooQuotes(
         Accept: "application/json",
       },
     });
-    if (!res.ok) throw new Error(`Yahoo ${res.status}`);
+    if (!res.ok) return null;
     const json = (await res.json()) as {
-      quoteResponse?: { result?: Array<Record<string, unknown>> };
+      chart?: { result?: Array<{ meta?: Record<string, unknown> }> };
     };
-    const results = json.quoteResponse?.result ?? [];
-    return tickers.map((t) => {
-      const q = results.find((r) => r.symbol === t.symbol);
-      if (!q) {
-        return {
-          symbol: t.symbol, displaySymbol: t.displaySymbol, name: t.name,
-          price: 0, previousClose: null, changePct: 0, marketState: null,
-          error: "No data from Yahoo",
-        };
-      }
+    const meta = json.chart?.result?.[0]?.meta;
+    if (!meta) return null;
+    const price = Number(meta.regularMarketPrice ?? 0);
+    if (!price) return null;
+    const prev = meta.chartPreviousClose != null ? Number(meta.chartPreviousClose) : null;
+    const changePct = prev ? ((price - prev) / prev) * 100 : 0;
+    return {
+      price,
+      previousClose: prev,
+      changePct,
+      marketState: (meta.marketState as string) ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchMarketQuotes(
+  tickers: Array<{ symbol: string; name: string; displaySymbol: string }>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+): Promise<MarketQuote[]> {
+  // Load cached rows first so we can fall back on any miss
+  const cacheRes = await supabase
+    .from("market_quotes_cache")
+    .select("symbol,display_symbol,name,price,previous_close,change_pct,market_state,fetched_at")
+    .in("symbol", tickers.map((t) => t.symbol));
+  const cacheRows: MarketCacheRow[] = (cacheRes.data as MarketCacheRow[] | null) ?? [];
+  const cacheMap = new Map<string, MarketCacheRow>(cacheRows.map((r) => [r.symbol, r]));
+
+  const live = await Promise.all(tickers.map((t) => fetchOneYahooChart(t.symbol)));
+
+  const toUpsert: MarketCacheRow[] = [];
+  const out: MarketQuote[] = tickers.map((t, i) => {
+    const q = live[i];
+    if (q) {
+      toUpsert.push({
+        symbol: t.symbol,
+        display_symbol: t.displaySymbol,
+        name: t.name,
+        price: q.price,
+        previous_close: q.previousClose,
+        change_pct: q.changePct,
+        market_state: q.marketState,
+        fetched_at: new Date().toISOString(),
+      });
+      return {
+        symbol: t.symbol, displaySymbol: t.displaySymbol, name: t.name,
+        price: q.price, previousClose: q.previousClose, changePct: q.changePct,
+        marketState: q.marketState,
+      };
+    }
+    const c = cacheMap.get(t.symbol);
+    if (c && Number(c.price) > 0) {
       return {
         symbol: t.symbol,
         displaySymbol: t.displaySymbol,
         name: t.name,
-        price: Number(q.regularMarketPrice ?? 0),
-        previousClose: q.regularMarketPreviousClose != null ? Number(q.regularMarketPreviousClose) : null,
-        changePct: Number(q.regularMarketChangePercent ?? 0),
-        marketState: (q.marketState as string) ?? null,
+        price: Number(c.price),
+        previousClose: c.previous_close != null ? Number(c.previous_close) : null,
+        changePct: c.change_pct != null ? Number(c.change_pct) : 0,
+        marketState: c.market_state,
+        cached: true,
+        fetchedAt: c.fetched_at,
       };
-    });
-  } catch (err) {
-    console.error("Yahoo Finance fetch failed:", err);
-    return tickers.map((t) => ({
+    }
+    return {
       symbol: t.symbol, displaySymbol: t.displaySymbol, name: t.name,
       price: 0, previousClose: null, changePct: 0, marketState: null,
-      error: `Live quote unavailable (${(err as Error).message})`,
-    }));
+      error: "Live quote unavailable and no cached price yet",
+    };
+  });
+
+  if (toUpsert.length > 0) {
+    // Write through service-role client so RLS doesn't block the insert
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      await supabaseAdmin.from("market_quotes_cache").upsert(toUpsert, { onConflict: "symbol" });
+    } catch (err) {
+      console.error("market cache upsert failed", err);
+    }
   }
+
+  return out;
 }
