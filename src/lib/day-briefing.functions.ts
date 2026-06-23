@@ -302,21 +302,20 @@ async function fetchOneYahooChart(
 
 async function fetchMarketQuotes(
   tickers: Array<{ symbol: string; name: string; displaySymbol: string }>,
-  supabase: SupabaseClientLike,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
 ): Promise<MarketQuote[]> {
   // Load cached rows first so we can fall back on any miss
   const cacheRes = await supabase
     .from("market_quotes_cache")
     .select("symbol,display_symbol,name,price,previous_close,change_pct,market_state,fetched_at")
     .in("symbol", tickers.map((t) => t.symbol));
-  const cacheRows = (cacheRes.data as Array<Record<string, unknown>> | null) ?? [];
-  const cacheMap = new Map<string, Record<string, unknown>>(
-    cacheRows.map((r) => [String(r.symbol), r]),
-  );
+  const cacheRows: MarketCacheRow[] = (cacheRes.data as MarketCacheRow[] | null) ?? [];
+  const cacheMap = new Map<string, MarketCacheRow>(cacheRows.map((r) => [r.symbol, r]));
 
   const live = await Promise.all(tickers.map((t) => fetchOneYahooChart(t.symbol)));
 
-  const toUpsert: Array<Record<string, unknown>> = [];
+  const toUpsert: MarketCacheRow[] = [];
   const out: MarketQuote[] = tickers.map((t, i) => {
     const q = live[i];
     if (q) {
@@ -345,9 +344,9 @@ async function fetchMarketQuotes(
         price: Number(c.price),
         previousClose: c.previous_close != null ? Number(c.previous_close) : null,
         changePct: c.change_pct != null ? Number(c.change_pct) : 0,
-        marketState: (c.market_state as string) ?? null,
+        marketState: c.market_state,
         cached: true,
-        fetchedAt: c.fetched_at as string,
+        fetchedAt: c.fetched_at,
       };
     }
     return {
@@ -368,4 +367,5 @@ async function fetchMarketQuotes(
   }
 
   return out;
+}
 }
