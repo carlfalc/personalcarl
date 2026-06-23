@@ -94,6 +94,35 @@ function TodayPage() {
   // ---- Task actions ----
   const [completing, setCompleting] = useState<Entry | null>(null);
   const [completeNote, setCompleteNote] = useState("");
+  const [editing, setEditing] = useState<Entry | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [editPriority, setEditPriority] = useState("3");
+
+  const editTask = useMutation({
+    mutationFn: async ({ id, title, notes, priority }: { id: string; title: string; notes: string; priority: number }) => {
+      const t = title.trim();
+      const n = notes.trim();
+      const content = n ? `${t}\n\n${n}` : t;
+      const { error } = await supabase.from("entries")
+        .update({ content, priority }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["today-entries"] });
+      setEditing(null);
+      toast.success("Task updated");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
+  });
+
+  const openEdit = (t: Entry) => {
+    const [title, ...rest] = (t.content ?? "").split("\n");
+    setEditTitle(title ?? "");
+    setEditNotes(rest.join("\n").trim());
+    setEditPriority(String(t.priority ?? 3));
+    setEditing(t);
+  };
 
   const completeTask = useMutation({
     mutationFn: async ({ t, note }: { t: Entry; note: string }) => {
