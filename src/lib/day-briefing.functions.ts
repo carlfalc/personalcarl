@@ -146,12 +146,16 @@ export const getDayBriefing = createServerFn({ method: "POST" })
         notes: m.notes,
       }));
 
-    // Fetch LIVE market quotes from Yahoo Finance (free, no key required)
-    const liveMarkets = await fetchYahooQuotes([
-      { symbol: "RKLB", name: "Rocket Lab", displaySymbol: "RKLB" },
-      { symbol: "SPCX", name: "SpaceX (SPCX)", displaySymbol: "SPCX" },
-      { symbol: "GC=F", name: "Gold spot", displaySymbol: "XAUUSD" },
-    ]);
+    // Fetch LIVE market quotes (Yahoo chart v8 endpoint — works without auth).
+    // Falls back to the DB cache so we always show a last-known price.
+    const liveMarkets = await fetchMarketQuotes(
+      [
+        { symbol: "RKLB", name: "Rocket Lab", displaySymbol: "RKLB" },
+        { symbol: "SPCX", name: "SpaceX (SPCX)", displaySymbol: "SPCX" },
+        { symbol: "GC=F", name: "Gold spot", displaySymbol: "XAUUSD" },
+      ],
+      supabase,
+    );
 
     const contextSummary = {
       date: data.date,
