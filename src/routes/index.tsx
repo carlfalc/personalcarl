@@ -14,7 +14,7 @@ import { BirthdayBanner } from "@/components/BirthdayBanner";
 import { GlobalSearch } from "@/components/GlobalSearch";
 import {
   GripVertical, Cloud, CloudRain, Sun, Check, X, CalendarClock, Lightbulb,
-  Plus, MessageSquarePlus, Mail, ShoppingCart, Trash2,
+  Plus, MessageSquarePlus, Mail, ShoppingCart, Trash2, Pencil,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
