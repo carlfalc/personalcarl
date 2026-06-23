@@ -182,6 +182,39 @@ export type Database = {
         }
         Relationships: []
       }
+      market_quotes_cache: {
+        Row: {
+          change_pct: number | null
+          display_symbol: string
+          fetched_at: string
+          market_state: string | null
+          name: string
+          previous_close: number | null
+          price: number
+          symbol: string
+        }
+        Insert: {
+          change_pct?: number | null
+          display_symbol: string
+          fetched_at?: string
+          market_state?: string | null
+          name: string
+          previous_close?: number | null
+          price: number
+          symbol: string
+        }
+        Update: {
+          change_pct?: number | null
+          display_symbol?: string
+          fetched_at?: string
+          market_state?: string | null
+          name?: string
+          previous_close?: number | null
+          price?: number
+          symbol?: string
+        }
+        Relationships: []
+      }
       meeting_documents: {
         Row: {
           created_at: string
