@@ -368,4 +368,3 @@ async function fetchMarketQuotes(
 
   return out;
 }
-}
