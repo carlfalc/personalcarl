@@ -645,6 +645,57 @@ function TodayPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!editing} onOpenChange={(o) => { if (!o) setEditing(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit task</DialogTitle>
+            <DialogDescription>
+              Update the title, priority, or add more context to this task.
+            </DialogDescription>
+          </DialogHeader>
+          {editing && (
+            <div className="space-y-3">
+              <Input
+                autoFocus
+                placeholder="Task title"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+              />
+              <Select value={editPriority} onValueChange={setEditPriority}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">P1 — Highest</SelectItem>
+                  <SelectItem value="2">P2 — High</SelectItem>
+                  <SelectItem value="3">P3 — Medium</SelectItem>
+                  <SelectItem value="4">P4 — Low</SelectItem>
+                  <SelectItem value="5">P5 — Lowest</SelectItem>
+                </SelectContent>
+              </Select>
+              <Textarea
+                placeholder="Description / comments — context, people, links…"
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                rows={6}
+              />
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
+            <Button
+              onClick={() => editing && editTask.mutate({
+                id: editing.id,
+                title: editTitle,
+                notes: editNotes,
+                priority: parseInt(editPriority),
+              })}
+              disabled={editTask.isPending || !editTitle.trim()}
+            >
+              {editTask.isPending ? "Saving…" : "Save changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
