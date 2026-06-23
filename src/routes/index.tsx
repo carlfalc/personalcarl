@@ -361,6 +361,14 @@ function TodayPage() {
                     <div className="flex items-center gap-1" onPointerDown={(e) => e.stopPropagation()}>
                       <Button
                         size="icon" variant="ghost"
+                        className="h-7 w-7 text-muted-foreground hover:bg-accent"
+                        title="Edit task"
+                        onClick={() => openEdit(t)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        size="icon" variant="ghost"
                         className="h-7 w-7 text-emerald-600 hover:bg-emerald-50"
                         title="Mark completed"
                         onClick={() => { setCompleting(t); setCompleteNote(""); }}
