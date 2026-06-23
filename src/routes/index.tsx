@@ -14,7 +14,7 @@ import { BirthdayBanner } from "@/components/BirthdayBanner";
 import { GlobalSearch } from "@/components/GlobalSearch";
 import {
   GripVertical, Cloud, CloudRain, Sun, Check, X, CalendarClock, Lightbulb,
-  Plus, MessageSquarePlus, Mail, ShoppingCart, Trash2,
+  Plus, MessageSquarePlus, Mail, ShoppingCart, Trash2, Pencil,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -94,6 +94,35 @@ function TodayPage() {
   // ---- Task actions ----
   const [completing, setCompleting] = useState<Entry | null>(null);
   const [completeNote, setCompleteNote] = useState("");
+  const [editing, setEditing] = useState<Entry | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [editPriority, setEditPriority] = useState("3");
+
+  const editTask = useMutation({
+    mutationFn: async ({ id, title, notes, priority }: { id: string; title: string; notes: string; priority: number }) => {
+      const t = title.trim();
+      const n = notes.trim();
+      const content = n ? `${t}\n\n${n}` : t;
+      const { error } = await supabase.from("entries")
+        .update({ content, priority }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["today-entries"] });
+      setEditing(null);
+      toast.success("Task updated");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
+  });
+
+  const openEdit = (t: Entry) => {
+    const [title, ...rest] = (t.content ?? "").split("\n");
+    setEditTitle(title ?? "");
+    setEditNotes(rest.join("\n").trim());
+    setEditPriority(String(t.priority ?? 3));
+    setEditing(t);
+  };
 
   const completeTask = useMutation({
     mutationFn: async ({ t, note }: { t: Entry; note: string }) => {
@@ -330,6 +359,14 @@ function TodayPage() {
                       </Select>
                     </div>
                     <div className="flex items-center gap-1" onPointerDown={(e) => e.stopPropagation()}>
+                      <Button
+                        size="icon" variant="ghost"
+                        className="h-7 w-7 text-muted-foreground hover:bg-accent"
+                        title="Edit task"
+                        onClick={() => openEdit(t)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
                       <Button
                         size="icon" variant="ghost"
                         className="h-7 w-7 text-emerald-600 hover:bg-emerald-50"
@@ -604,6 +641,57 @@ function TodayPage() {
               className="bg-emerald-600 hover:bg-emerald-700"
             >
               {completeTask.isPending ? "Saving…" : "Mark complete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editing} onOpenChange={(o) => { if (!o) setEditing(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit task</DialogTitle>
+            <DialogDescription>
+              Update the title, priority, or add more context to this task.
+            </DialogDescription>
+          </DialogHeader>
+          {editing && (
+            <div className="space-y-3">
+              <Input
+                autoFocus
+                placeholder="Task title"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+              />
+              <Select value={editPriority} onValueChange={setEditPriority}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">P1 — Highest</SelectItem>
+                  <SelectItem value="2">P2 — High</SelectItem>
+                  <SelectItem value="3">P3 — Medium</SelectItem>
+                  <SelectItem value="4">P4 — Low</SelectItem>
+                  <SelectItem value="5">P5 — Lowest</SelectItem>
+                </SelectContent>
+              </Select>
+              <Textarea
+                placeholder="Description / comments — context, people, links…"
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                rows={6}
+              />
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
+            <Button
+              onClick={() => editing && editTask.mutate({
+                id: editing.id,
+                title: editTitle,
+                notes: editNotes,
+                priority: parseInt(editPriority),
+              })}
+              disabled={editTask.isPending || !editTitle.trim()}
+            >
+              {editTask.isPending ? "Saving…" : "Save changes"}
             </Button>
           </DialogFooter>
         </DialogContent>
