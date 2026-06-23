@@ -212,13 +212,16 @@ Required JSON shape — return EXACTLY these keys, nothing else:
       const priceStr = m.displaySymbol === "XAUUSD"
         ? `$${m.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/oz`
         : `$${m.price.toFixed(2)}`;
+      const cachedNote = m.cached
+        ? `last known · cached ${m.fetchedAt ? new Date(m.fetchedAt).toLocaleString("en-NZ", { timeZone: "Pacific/Auckland", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" }) : ""}`
+        : `${m.marketState ?? "last trade"} · prev close $${m.previousClose?.toFixed(2) ?? "—"}`;
       return {
         symbol: m.displaySymbol,
         name: m.name,
-        price: m.error ? "—" : priceStr,
-        change_pct: m.error ? "—" : `${m.changePct >= 0 ? "+" : ""}${m.changePct.toFixed(2)}%`,
+        price: m.price > 0 ? priceStr : "—",
+        change_pct: m.price > 0 ? `${m.changePct >= 0 ? "+" : ""}${m.changePct.toFixed(2)}%` : "—",
         direction: dir,
-        note: m.error ?? `${m.marketState ?? "last trade"} · prev close $${m.previousClose?.toFixed(2) ?? "—"}`,
+        note: m.error ?? cachedNote,
       };
     });
 
