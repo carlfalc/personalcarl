@@ -655,6 +655,138 @@ export type Database = {
         }
         Relationships: []
       }
+      saved_bottle_can_products: {
+        Row: {
+          breakeven: number | null
+          carton_cost: number
+          cost_per_unit: number | null
+          created_at: string
+          id: string
+          margin_carton: number | null
+          margin_unit: number | null
+          markup_carton: number | null
+          markup_unit: number | null
+          ml: number
+          name: string
+          package_type: string
+          profit_carton: number | null
+          profit_per_unit: number | null
+          revenue: number | null
+          saleable_units: number | null
+          sell_price: number
+          total_ml: number | null
+          units: number
+          updated_at: string
+          user_id: string
+          wastage_pct: number
+        }
+        Insert: {
+          breakeven?: number | null
+          carton_cost: number
+          cost_per_unit?: number | null
+          created_at?: string
+          id?: string
+          margin_carton?: number | null
+          margin_unit?: number | null
+          markup_carton?: number | null
+          markup_unit?: number | null
+          ml: number
+          name: string
+          package_type: string
+          profit_carton?: number | null
+          profit_per_unit?: number | null
+          revenue?: number | null
+          saleable_units?: number | null
+          sell_price: number
+          total_ml?: number | null
+          units: number
+          updated_at?: string
+          user_id: string
+          wastage_pct?: number
+        }
+        Update: {
+          breakeven?: number | null
+          carton_cost?: number
+          cost_per_unit?: number | null
+          created_at?: string
+          id?: string
+          margin_carton?: number | null
+          margin_unit?: number | null
+          markup_carton?: number | null
+          markup_unit?: number | null
+          ml?: number
+          name?: string
+          package_type?: string
+          profit_carton?: number | null
+          profit_per_unit?: number | null
+          revenue?: number | null
+          saleable_units?: number | null
+          sell_price?: number
+          total_ml?: number | null
+          units?: number
+          updated_at?: string
+          user_id?: string
+          wastage_pct?: number
+        }
+        Relationships: []
+      }
+      saved_keg_products: {
+        Row: {
+          breakeven: number | null
+          cost_per_glass: number | null
+          created_at: string
+          full_glasses: number | null
+          glass_ml: number
+          glass_price: number
+          id: string
+          keg_l: number
+          keg_price: number
+          margin: number | null
+          name: string
+          profit_per_glass: number | null
+          revenue: number | null
+          total_profit: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          breakeven?: number | null
+          cost_per_glass?: number | null
+          created_at?: string
+          full_glasses?: number | null
+          glass_ml: number
+          glass_price: number
+          id?: string
+          keg_l: number
+          keg_price: number
+          margin?: number | null
+          name: string
+          profit_per_glass?: number | null
+          revenue?: number | null
+          total_profit?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          breakeven?: number | null
+          cost_per_glass?: number | null
+          created_at?: string
+          full_glasses?: number | null
+          glass_ml?: number
+          glass_price?: number
+          id?: string
+          keg_l?: number
+          keg_price?: number
+          margin?: number | null
+          name?: string
+          profit_per_glass?: number | null
+          revenue?: number | null
+          total_profit?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       schedules: {
         Row: {
           created_at: string
