@@ -14,6 +14,7 @@ import {
   Clock,
   Users,
   Settings as SettingsIcon,
+  Calculator as CalculatorIcon,
   GripVertical,
   type LucideIcon,
 } from "lucide-react";
@@ -64,6 +65,7 @@ const items: Array<Item> = [
   { id: "roster",    title: "Roster",    subtitle: "Glasshouse weekly roster",   url: "/roster",    icon: Users },
   { id: "training",  title: "Training Roster", subtitle: "Weekly training schedule", url: "/training-roster", icon: Users },
   { id: "settings",  title: "Settings",  subtitle: "Telegram & birthdays",       url: "/settings",  icon: SettingsIcon },
+  { id: "calculator", title: "Calculator", subtitle: "Tools & calculators",       url: "/calculator", icon: CalculatorIcon },
 ];
 
 const ITEM_BY_ID = Object.fromEntries(items.map((i) => [i.id, i])) as Record<string, Item>;
