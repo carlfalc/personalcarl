@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import { Beer, Calculator as CalcIcon, ArrowLeft, Wine } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Beer, Calculator as CalcIcon, ArrowLeft, Wine, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/calculator")({
   head: () => ({ meta: [{ title: "Calculator — Personal OS" }] }),
@@ -25,7 +27,7 @@ function CalculatorPage() {
 
   if (open) {
     return (
-      <div className="p-6 max-w-5xl mx-auto">
+      <div className="p-6 max-w-6xl mx-auto">
         <Button variant="ghost" size="sm" onClick={() => setOpen(null)} className="mb-4">
           <ArrowLeft className="h-4 w-4 mr-1" /> Back to calculators
         </Button>
@@ -91,22 +93,45 @@ function Tile({
   );
 }
 
+/* ─────────────────────────  KEG  ───────────────────────── */
+
+type KegRow = {
+  id: string;
+  name: string;
+  keg_l: number;
+  glass_ml: number;
+  keg_price: number;
+  glass_price: number;
+  full_glasses: number | null;
+  revenue: number | null;
+  cost_per_glass: number | null;
+  profit_per_glass: number | null;
+  total_profit: number | null;
+  margin: number | null;
+  breakeven: number | null;
+};
+
 function BeerKegCalculator() {
+  const [name, setName] = useState("");
   const [kegL, setKegL] = useState(50);
   const [glassMl, setGlassMl] = useState(425);
   const [kegPrice, setKegPrice] = useState(0);
   const [glassPrice, setGlassPrice] = useState(0);
   const [r, setR] = useState<null | {
-    fullGlasses: number;
-    theoretical: number;
-    leftoverMl: number;
-    revenue: number;
-    costPerGlass: number;
-    profitPerGlass: number;
-    totalProfit: number;
-    margin: number;
-    breakeven: number;
+    fullGlasses: number; theoretical: number; leftoverMl: number; revenue: number;
+    costPerGlass: number; profitPerGlass: number; totalProfit: number; margin: number; breakeven: number;
   }>(null);
+  const [rows, setRows] = useState<KegRow[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    const { data } = await supabase
+      .from("saved_keg_products")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (data) setRows(data as KegRow[]);
+  };
+  useEffect(() => { load(); }, []);
 
   const calc = () => {
     const kegMl = kegL * 1000;
@@ -121,7 +146,37 @@ function BeerKegCalculator() {
     const breakeven = fullGlasses > 0 ? kegPrice / fullGlasses : 0;
     setR({ fullGlasses, theoretical, leftoverMl, revenue, costPerGlass, profitPerGlass, totalProfit, margin, breakeven });
   };
-  const reset = () => { setKegL(50); setGlassMl(425); setKegPrice(0); setGlassPrice(0); setR(null); };
+  const reset = () => { setName(""); setKegL(50); setGlassMl(425); setKegPrice(0); setGlassPrice(0); setR(null); };
+
+  const save = async () => {
+    if (!r) { toast.error("Press Calculate first"); return; }
+    if (!name.trim()) { toast.error("Enter a product name"); return; }
+    setSaving(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setSaving(false); toast.error("Sign in to save"); return; }
+    const { error } = await supabase.from("saved_keg_products").insert({
+      user_id: user.id, name: name.trim(),
+      keg_l: kegL, glass_ml: glassMl, keg_price: kegPrice, glass_price: glassPrice,
+      full_glasses: r.fullGlasses, revenue: r.revenue, cost_per_glass: r.costPerGlass,
+      profit_per_glass: r.profitPerGlass, total_profit: r.totalProfit, margin: r.margin, breakeven: r.breakeven,
+    });
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Saved");
+    await load();
+  };
+
+  const remove = async (id: string) => {
+    await supabase.from("saved_keg_products").delete().eq("id", id);
+    await load();
+  };
+
+  const loadIntoForm = (row: KegRow) => {
+    setName(row.name); setKegL(Number(row.keg_l)); setGlassMl(Number(row.glass_ml));
+    setKegPrice(Number(row.keg_price)); setGlassPrice(Number(row.glass_price));
+    setTimeout(calc, 0);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   return (
     <Card className="p-6">
@@ -129,10 +184,18 @@ function BeerKegCalculator() {
         <h2 className="text-xl font-bold flex items-center gap-2">
           <Beer className="h-5 w-5 text-amber-600" /> Beer Keg Profit Calculator
         </h2>
-        <p className="text-sm text-muted-foreground">Default keg size is 50L and default glass size is 425ml.</p>
+        <p className="text-sm text-muted-foreground mt-2">
+          Use this to work out how many glasses you'll get out of a keg, what each glass actually costs you,
+          and how much gross profit and margin you'll make at your menu price. Defaults are a 50L keg and a
+          425ml glass (standard NZ pint).
+        </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="sm:col-span-2">
+          <Label>Product name (for saving)</Label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Speights Gold 50L" />
+        </div>
         <div>
           <Label>Keg size (litres)</Label>
           <Input type="number" value={kegL} onChange={(e) => setKegL(Number(e.target.value))} />
@@ -151,8 +214,11 @@ function BeerKegCalculator() {
         </div>
       </div>
 
-      <div className="flex gap-2 mt-5">
+      <div className="flex gap-2 mt-5 flex-wrap">
         <Button onClick={calc} className="bg-amber-600 hover:bg-amber-700 text-white">Calculate</Button>
+        <Button onClick={save} disabled={!r || saving} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+          {saving ? "Saving..." : "Save product"}
+        </Button>
         <Button variant="secondary" onClick={reset}>Reset defaults</Button>
       </div>
 
@@ -171,13 +237,85 @@ function BeerKegCalculator() {
       )}
 
       <div className="mt-5 p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-sm">
-        Note: This calculates keg-level gross profit only. It does not remove GST, card fees, gas, wastage, line loss, staff costs, or free pours. For real-world planning, allow roughly 3–8% wastage depending on tap setup and staff consistency.
+        <strong>About this calculator:</strong> It estimates the gross profit you'll get from a single keg of beer
+        once you've poured it into glasses at your chosen menu price. It does NOT remove GST, card fees, gas,
+        line loss, staff costs, or free pours. For real-world planning, allow roughly 3–8% wastage depending on
+        tap setup and staff consistency.
       </div>
+
+      <h3 className="text-lg font-bold mt-8 mb-3">Saved keg products</h3>
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No saved products yet. Calculate one above and press Save.</p>
+      ) : (
+        <div className="overflow-x-auto border rounded-lg">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50">
+              <tr className="text-left">
+                <Th>Product</Th><Th>Keg L</Th><Th>Glass ml</Th><Th>Keg cost</Th><Th>Sell / glass</Th>
+                <Th>Glasses</Th><Th>Cost / glass</Th><Th>Profit / glass</Th>
+                <Th>Revenue</Th><Th>Total profit</Th><Th>Margin</Th><Th></Th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id} className="border-t hover:bg-muted/30 cursor-pointer" onClick={() => loadIntoForm(row)}>
+                  <Td><span className="font-medium">{row.name}</span></Td>
+                  <Td>{fmt(Number(row.keg_l))}</Td>
+                  <Td>{fmt(Number(row.glass_ml))}</Td>
+                  <Td>{money(Number(row.keg_price))}</Td>
+                  <Td>{money(Number(row.glass_price))}</Td>
+                  <Td>{fmt(Number(row.full_glasses ?? 0))}</Td>
+                  <Td>{money(Number(row.cost_per_glass ?? 0))}</Td>
+                  <Td className={Number(row.profit_per_glass ?? 0) >= 0 ? "text-emerald-700" : "text-red-700"}>{money(Number(row.profit_per_glass ?? 0))}</Td>
+                  <Td>{money(Number(row.revenue ?? 0))}</Td>
+                  <Td className={Number(row.total_profit ?? 0) >= 0 ? "text-emerald-700" : "text-red-700"}>{money(Number(row.total_profit ?? 0))}</Td>
+                  <Td>{fmt(Number(row.margin ?? 0))}%</Td>
+                  <Td>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); remove(row.id); }}
+                      className="text-red-600 hover:text-red-800"
+                      aria-label="Delete"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="text-xs text-muted-foreground p-2">Tip: click any row to load it back into the calculator and adjust the price.</p>
+        </div>
+      )}
     </Card>
   );
 }
 
+/* ─────────────────────────  BOTTLE / CAN  ───────────────────────── */
+
+type BcRow = {
+  id: string;
+  name: string;
+  package_type: string;
+  ml: number;
+  units: number;
+  carton_cost: number;
+  sell_price: number;
+  wastage_pct: number;
+  cost_per_unit: number | null;
+  profit_per_unit: number | null;
+  margin_unit: number | null;
+  markup_unit: number | null;
+  breakeven: number | null;
+  saleable_units: number | null;
+  revenue: number | null;
+  profit_carton: number | null;
+  margin_carton: number | null;
+  markup_carton: number | null;
+  total_ml: number | null;
+};
+
 function BottleCanCalculator() {
+  const [name, setName] = useState("");
   const [pkg, setPkg] = useState<"Bottle" | "Can">("Bottle");
   const [ml, setMl] = useState(330);
   const [units, setUnits] = useState(12);
@@ -185,18 +323,21 @@ function BottleCanCalculator() {
   const [sellPrice, setSellPrice] = useState(0);
   const [wastagePct, setWastagePct] = useState(0);
   const [r, setR] = useState<null | {
-    costPerUnit: number;
-    profitPerUnit: number;
-    marginUnit: number;
-    markupUnit: number;
-    breakeven: number;
-    saleableUnits: number;
-    revenue: number;
-    profitCarton: number;
-    marginCarton: number;
-    markupCarton: number;
-    totalMl: number;
+    costPerUnit: number; profitPerUnit: number; marginUnit: number; markupUnit: number;
+    breakeven: number; saleableUnits: number; revenue: number; profitCarton: number;
+    marginCarton: number; markupCarton: number; totalMl: number;
   }>(null);
+  const [rows, setRows] = useState<BcRow[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    const { data } = await supabase
+      .from("saved_bottle_can_products")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (data) setRows(data as BcRow[]);
+  };
+  useEffect(() => { load(); }, []);
 
   const calc = () => {
     const costPerUnit = units > 0 ? cartonCost / units : 0;
@@ -213,7 +354,41 @@ function BottleCanCalculator() {
     setR({ costPerUnit, profitPerUnit, marginUnit, markupUnit, breakeven, saleableUnits, revenue, profitCarton, marginCarton, markupCarton, totalMl });
   };
   const reset = () => {
-    setPkg("Bottle"); setMl(330); setUnits(12); setCartonCost(0); setSellPrice(0); setWastagePct(0); setR(null);
+    setName(""); setPkg("Bottle"); setMl(330); setUnits(12); setCartonCost(0); setSellPrice(0); setWastagePct(0); setR(null);
+  };
+
+  const save = async () => {
+    if (!r) { toast.error("Press Calculate first"); return; }
+    if (!name.trim()) { toast.error("Enter a product name"); return; }
+    setSaving(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setSaving(false); toast.error("Sign in to save"); return; }
+    const { error } = await supabase.from("saved_bottle_can_products").insert({
+      user_id: user.id, name: name.trim(), package_type: pkg, ml, units,
+      carton_cost: cartonCost, sell_price: sellPrice, wastage_pct: wastagePct,
+      cost_per_unit: r.costPerUnit, profit_per_unit: r.profitPerUnit, margin_unit: r.marginUnit,
+      markup_unit: r.markupUnit, breakeven: r.breakeven, saleable_units: r.saleableUnits,
+      revenue: r.revenue, profit_carton: r.profitCarton, margin_carton: r.marginCarton,
+      markup_carton: r.markupCarton, total_ml: r.totalMl,
+    });
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Saved");
+    await load();
+  };
+
+  const remove = async (id: string) => {
+    await supabase.from("saved_bottle_can_products").delete().eq("id", id);
+    await load();
+  };
+
+  const loadIntoForm = (row: BcRow) => {
+    setName(row.name); setPkg((row.package_type as "Bottle" | "Can") || "Bottle");
+    setMl(Number(row.ml)); setUnits(Number(row.units));
+    setCartonCost(Number(row.carton_cost)); setSellPrice(Number(row.sell_price));
+    setWastagePct(Number(row.wastage_pct));
+    setTimeout(calc, 0);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   return (
@@ -222,12 +397,18 @@ function BottleCanCalculator() {
         <h2 className="text-xl font-bold flex items-center gap-2">
           <Wine className="h-5 w-5 text-blue-600" /> Bottle & Can Carton Profit Calculator
         </h2>
-        <p className="text-sm text-muted-foreground">
-          Cost, selling price, profit, markup, and gross margin for bottled or canned beer.
+        <p className="text-sm text-muted-foreground mt-2">
+          Use this for bottled and canned beer bought by the carton. Enter the carton cost and your menu price
+          per bottle or can, and you'll get cost per unit, profit per unit, gross margin, markup, and the
+          break-even sale price. Optional wastage lets you account for breakage, staff comps and freebies.
         </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="sm:col-span-2">
+          <Label>Product name (for saving)</Label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Corona 24 x 330ml" />
+        </div>
         <div>
           <Label>Package type</Label>
           <Select value={pkg} onValueChange={(v) => setPkg(v as "Bottle" | "Can")}>
@@ -241,12 +422,10 @@ function BottleCanCalculator() {
         <div>
           <Label>Millilitres per unit</Label>
           <Input type="number" value={ml} onChange={(e) => setMl(Number(e.target.value))} />
-          <p className="text-xs text-muted-foreground mt-1">Example: 330ml bottle or can.</p>
         </div>
         <div>
           <Label>Units per carton</Label>
           <Input type="number" value={units} onChange={(e) => setUnits(Number(e.target.value))} />
-          <p className="text-xs text-muted-foreground mt-1">Example: 12 bottles/cans per carton.</p>
         </div>
         <div>
           <Label>Carton purchase price</Label>
@@ -259,12 +438,14 @@ function BottleCanCalculator() {
         <div>
           <Label>Optional wastage / staff comp %</Label>
           <Input type="number" value={wastagePct} onChange={(e) => setWastagePct(Number(e.target.value))} />
-          <p className="text-xs text-muted-foreground mt-1">Leave at 0 unless you want to allow for loss, breakage, freebies, etc.</p>
         </div>
       </div>
 
-      <div className="flex gap-2 mt-5">
+      <div className="flex gap-2 mt-5 flex-wrap">
         <Button onClick={calc} className="bg-blue-600 hover:bg-blue-700 text-white">Calculate</Button>
+        <Button onClick={save} disabled={!r || saving} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+          {saving ? "Saving..." : "Save product"}
+        </Button>
         <Button variant="secondary" onClick={reset}>Reset defaults</Button>
       </div>
 
@@ -293,19 +474,64 @@ function BottleCanCalculator() {
       )}
 
       <div className="mt-5 p-4 rounded-lg bg-blue-50 border border-blue-200 text-blue-900 text-sm">
-        <strong>Key formulas:</strong>
+        <strong>About this calculator:</strong> Gross profit only — does not remove GST, card fees, staff wages,
+        refrigeration, or supplier rebates. Use the wastage field for a more conservative real-world result.
+        <div className="mt-2"><strong>Key formulas:</strong></div>
         <div>Cost per unit = carton cost ÷ units per carton</div>
         <div>Profit per unit = sale price − cost per unit</div>
         <div>Gross margin % = profit ÷ sale price × 100</div>
         <div>Markup % = profit ÷ cost × 100</div>
       </div>
 
-      <div className="mt-3 p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-sm">
-        Note: This is a gross profit calculator. It does not remove GST, card fees, staff wages, breakage, refrigeration, or supplier rebates. Use the wastage field if you want a more conservative real-world result.
-      </div>
+      <h3 className="text-lg font-bold mt-8 mb-3">Saved bottle & can products</h3>
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No saved products yet. Calculate one above and press Save.</p>
+      ) : (
+        <div className="overflow-x-auto border rounded-lg">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50">
+              <tr className="text-left">
+                <Th>Product</Th><Th>Type</Th><Th>ml</Th><Th>Units</Th>
+                <Th>Carton cost</Th><Th>Sell / unit</Th>
+                <Th>Cost / unit</Th><Th>Profit / unit</Th><Th>Margin</Th>
+                <Th>Revenue / carton</Th><Th>Profit / carton</Th><Th></Th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id} className="border-t hover:bg-muted/30 cursor-pointer" onClick={() => loadIntoForm(row)}>
+                  <Td><span className="font-medium">{row.name}</span></Td>
+                  <Td>{row.package_type}</Td>
+                  <Td>{fmt(Number(row.ml))}</Td>
+                  <Td>{fmt(Number(row.units))}</Td>
+                  <Td>{money(Number(row.carton_cost))}</Td>
+                  <Td>{money(Number(row.sell_price))}</Td>
+                  <Td>{money(Number(row.cost_per_unit ?? 0))}</Td>
+                  <Td className={Number(row.profit_per_unit ?? 0) >= 0 ? "text-emerald-700" : "text-red-700"}>{money(Number(row.profit_per_unit ?? 0))}</Td>
+                  <Td>{fmt(Number(row.margin_unit ?? 0))}%</Td>
+                  <Td>{money(Number(row.revenue ?? 0))}</Td>
+                  <Td className={Number(row.profit_carton ?? 0) >= 0 ? "text-emerald-700" : "text-red-700"}>{money(Number(row.profit_carton ?? 0))}</Td>
+                  <Td>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); remove(row.id); }}
+                      className="text-red-600 hover:text-red-800"
+                      aria-label="Delete"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="text-xs text-muted-foreground p-2">Tip: click any row to load it back into the calculator and adjust the price.</p>
+        </div>
+      )}
     </Card>
   );
 }
+
+/* ─────────────────────────  shared  ───────────────────────── */
 
 function Stat({ name, value, good }: { name: string; value: string; good?: boolean }) {
   return (
@@ -316,6 +542,13 @@ function Stat({ name, value, good }: { name: string; value: string; good?: boole
       </div>
     </div>
   );
+}
+
+function Th({ children }: { children?: React.ReactNode }) {
+  return <th className="px-3 py-2 font-semibold whitespace-nowrap">{children}</th>;
+}
+function Td({ children, className }: { children?: React.ReactNode; className?: string }) {
+  return <td className={`px-3 py-2 whitespace-nowrap ${className ?? ""}`}>{children}</td>;
 }
 
 const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
