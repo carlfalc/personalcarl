@@ -988,6 +988,19 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Typed trigger shortcut: "draft email", "email draft", "compose/write an email"
+    const emailTrigger = transcript.match(/\b(draft(?:\s+an?)?\s+email|email\s+draft|compose\s+an?\s+email|write\s+an?\s+email|send\s+an?\s+email)\b/i);
+    if (emailTrigger) {
+      await runOneShotEmail(supabase, chatId, transcript, {
+        recipientQuery: null,
+        explicitEmail: null,
+        content: transcript,
+      });
+      return new Response(JSON.stringify({ ok: true, handled: "email_trigger" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Active family profile follow-up, unless this is clearly a new command
     const { data: familyPendingRows } = await supabase
       .from("pending_family_profiles")
