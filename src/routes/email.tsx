@@ -333,6 +333,11 @@ function EmailPage() {
                     <div className="text-xs text-muted-foreground line-clamp-1">
                       {d.recipient || "(no recipient)"}
                     </div>
+                    {!d.recipient && (
+                      <span className="inline-block mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                        Needs recipient — add manually
+                      </span>
+                    )}
                     <div className="text-[10px] text-muted-foreground mt-0.5">
                       {new Date(d.created_at).toLocaleString()}
                     </div>
