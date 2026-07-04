@@ -556,6 +556,7 @@ export type Database = {
           nudge_time: string
           phone: string | null
           telegram_chat_id: string | null
+          timezone: string | null
           updated_at: string
           weekly_review_day: number
           weekly_review_enabled: boolean
@@ -586,6 +587,7 @@ export type Database = {
           nudge_time?: string
           phone?: string | null
           telegram_chat_id?: string | null
+          timezone?: string | null
           updated_at?: string
           weekly_review_day?: number
           weekly_review_enabled?: boolean
@@ -616,6 +618,7 @@ export type Database = {
           nudge_time?: string
           phone?: string | null
           telegram_chat_id?: string | null
+          timezone?: string | null
           updated_at?: string
           weekly_review_day?: number
           weekly_review_enabled?: boolean
