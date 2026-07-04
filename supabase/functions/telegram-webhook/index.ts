@@ -1219,10 +1219,14 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Start at most one email flow per message (simplest UX)
+    // Start at most one email flow per message (one-shot: draft immediately)
     const firstIntent = parsed.email_intents[0];
-    if (firstIntent?.recipient_query) {
-      await startRecipientFlow(supabase, chatId, firstIntent.recipient_query);
+    if (firstIntent) {
+      await runOneShotEmail(supabase, chatId, transcript, {
+        recipientQuery: firstIntent.recipient_query ?? null,
+        explicitEmail: firstIntent.recipient_email ?? null,
+        content: firstIntent.content ?? null,
+      });
     }
 
     const summary = summarise(parsed, firstIntent ? 1 : 0);
