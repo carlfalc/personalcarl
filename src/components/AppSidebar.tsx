@@ -42,7 +42,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-type CountKey = "tasks" | "ideas" | "todos" | "meetings" | "images";
+type CountKey = "tasks" | "ideas" | "meetings" | "images";
 type CountColor = "red" | "green" | "black";
 
 type Item = {
