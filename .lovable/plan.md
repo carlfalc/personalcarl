@@ -1,64 +1,76 @@
-# Itinerary Page Plan
+# Medical Page
 
-A new `/itinerary` route where you build travel itineraries with legs (flights, trains, buses, vehicles), accommodations, and get AI-powered "what's nearby" recommendations with maps.
+New `/medical` route in the sidebar, backed by three new tables and one AI server function. Reuses the birthday-style dashboard notification pattern for GP checkup reminders.
 
-## Page structure
+## Page layout
 
-**1. Itinerary header**
-- Itinerary name (text)
-- Destination country + city (same dropdowns as Settings, using `country-state-city`)
-- Travel dates (start / end date pickers)
-- Travel modes: checkboxes for Vehicle, Train, Plane, Bus (select one or more — controls which leg types the "Add leg" menu offers)
+1. **My details** (single card, edit dialog)
+   - Doctor name, clinic name, clinic address, doctor phone, clinic phone, email, website
+   - **Checkup frequency** dropdown: 1, 2, 3, 4, 6, 9, 10, 11, 12 months
+   - Last visit date (so next-due can be calculated)
 
-**2. Legs (ordered list, add/remove/reorder)**
-Each leg has a type + shared fields (from/to, depart time, arrive time, notes) plus type-specific fields:
-- **Flight**: airline, flight number, departure airport (IATA), arrival airport, depart/arrive datetime. Toggle: "Show airport info (lounges, parking, transit)" → calls AI to summarize both airports.
-- **Train**: operator, train number, from/to station, depart/arrive. Toggle: "Show station info".
-- **Bus**: operator, route/number, from/to stop, depart/arrive. Toggle: "Show station info".
-- **Vehicle**: from/to, depart time, driver/vehicle notes.
-- **Accommodation** (also a leg-type entry so it slots into the timeline): name, address, check-in / check-out, notes. Shows a Google Map for the address and unlocks the nearby-search box.
+2. **Prescriptions** (list under "My details" with add/edit/delete)
+   - Name, dosage amount, unit (mg, mcg, g, ml, tabs, capsules, puffs, drops, IU), frequency (once/twice/three times daily, weekly, as needed), notes
 
-**3. Nearby places (per accommodation)**
-- Prompt: "What do you need near {accommodation name}? Restaurants, bars, shopping, events, anything else…"
-- Text input + microphone button (Web Speech API `SpeechRecognition`) + date range (auto-filled from stay dates).
-- Submit → server function calls Lovable AI (`google/gemini-3-flash-preview`) with tool-calling to Google Places (New) `searchText`/`searchNearby` via the existing Google Maps connector gateway, biased to the accommodation coordinates.
-- Results render as cards: name, category, rating, distance from accommodation, address, "Open in map" link. All results also plotted as pins on a shared map next to the accommodation, with the accommodation as the anchor pin.
+3. **Blood test analysis**
+   - Intro paragraph explaining you can upload screenshots/PDFs of blood results and get an AI overview
+   - Upload zone (images + PDFs, multi-file) + Send button
+   - AI report renders with:
+     - Header: user name + DOB from Settings profile, today's date/time
+     - **Quick overview** — colored bullets: very bad / bad / neutral / good / very good
+     - **Results table** — each marker with normal/abnormal label + up/down arrow (red down = low, green up = high or vice-versa per marker), reference range
+     - **Suggested questions for your physician** — flagged concerns (e.g. liver markers)
+     - **Disclaimer** — research/educational, not medical advice
+   - Save button stores the report in a log; log renders as a collapsible history list below
 
-## Data model
+## Dashboard reminder
 
-New tables (RLS, `auth.uid()`-scoped, standard GRANTs, `updated_at` trigger):
+- New notification kind `doctor_checkup` alongside birthdays / overdue tasks
+- Computed from `last_visit_date + frequency_months`; when due, shows in the same dashboard notifications area
+- Click → popup "Your regular doctor's checkup is due" with a button to jump to `/medical`
 
-```text
-itineraries
-  id, user_id, name, country, city, start_date, end_date, travel_modes text[]
+## Data model (new tables, all RLS-scoped to auth.uid)
 
-itinerary_legs
-  id, itinerary_id, user_id, position int, type
-  ('flight'|'train'|'bus'|'vehicle'|'accommodation'),
-  from_label, to_label, depart_at, arrive_at,
-  details jsonb   -- flight_no, airline, address, coords, toggles, etc.
+- `medical_profile` (1 row per user): doctor + clinic fields, `checkup_frequency_months int`, `last_visit_date date`
+- `medical_prescriptions`: name, dosage_amount numeric, dosage_unit text, frequency text, notes
+- `medical_blood_reports`: uploaded file paths, `ai_report jsonb` (overview bullets, results array, questions, disclaimer), `created_at`
 
-itinerary_nearby_searches
-  id, leg_id, user_id, query, results jsonb, created_at
-```
+Storage: new private bucket `medical-uploads` with owner-scoped RLS on `storage.objects`.
 
-## AI + Maps
+## Server functions (`src/lib/medical.functions.ts`)
 
-- **Nearby search** and **airport/station info**: TanStack server functions in `src/lib/itinerary.functions.ts` guarded by `requireSupabaseAuth`, using the Lovable AI gateway (`ai-sdk-lovable-gateway`) with a `places_search` tool that proxies through the existing Google Maps connector gateway (`places/v1/places:searchText`, `places/v1/places:searchNearby`).
-- **Maps** rendered client-side with the Maps JS API using `VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY` (already available via the connector). Accommodation pin + result pins, click-to-open in Google Maps.
-- **Microphone** uses the browser `webkitSpeechRecognition` / `SpeechRecognition` API — no server component. Falls back gracefully if unsupported.
+- `getMedicalProfile`, `saveMedicalProfile`
+- `listPrescriptions`, `savePrescription`, `deletePrescription`
+- `listBloodReports`, `saveBloodReport`, `deleteBloodReport`
+- `analyzeBloodResults({ fileUrls, userName, dob })` — calls Lovable AI Gateway (`google/gemini-2.5-pro`) with the images/PDFs and a strict prompt returning JSON:
+  ```
+  { overview: [{severity, text}], results: [{marker, value, unit, range, direction: 'up'|'down'|'ok', status: 'normal'|'abnormal', note}], questions: string[], disclaimer: string }
+  ```
+- `markCheckupDone` (updates `last_visit_date` to today)
 
-## Files
+All `requireSupabaseAuth`.
 
-- `supabase/migrations/<ts>_itinerary.sql` — 3 tables + GRANTs + RLS + trigger.
-- `src/routes/itinerary.tsx` — list of itineraries + create button.
-- `src/routes/itinerary.$id.tsx` — itinerary detail (header, legs, nearby).
-- `src/lib/itinerary.functions.ts` — `nearbySearch`, `placeInfo` server fns.
-- `src/components/itinerary/LegCard.tsx`, `AccommodationMap.tsx`, `NearbySearch.tsx`, `MicButton.tsx`.
-- `src/components/AppSidebar.tsx` — add "Itinerary" entry.
+## AI prompt (blood analysis)
 
-## Notes
+System: "You are a clinical results summarizer for educational research only. Never provide diagnosis or treatment. Always include a disclaimer. Return JSON only."
 
-- Country/city dropdown reuses the exact pattern from Settings.
-- Legs render in a single timeline sorted by `position` (drag handles for reorder — simple up/down buttons first pass).
-- Airport/station info panel is collapsed by default; expanding triggers the AI call once and caches into the leg's `details.info` jsonb.
+User instruction includes: patient name + DOB (from Settings), today's date, the uploaded images/PDFs, and asks for:
+- Quick overview bullets with severity (very_bad/bad/neutral/good/very_good)
+- Full marker-by-marker table with reference ranges and direction arrows
+- Suggested questions to ask the physician, especially for markers suggesting possible concerns (e.g. elevated ALT/AST → liver)
+- Standard disclaimer text
+
+## Files to create/edit
+
+- Migration: 3 tables + storage bucket + RLS + GRANTs
+- `src/lib/medical.functions.ts` (new)
+- `src/routes/medical.tsx` (new)
+- `src/components/AppSidebar.tsx` — add Medical link (Stethoscope icon)
+- Dashboard notifications component — add checkup-due card (same pattern as birthdays)
+- `src/integrations/supabase/types.ts` — regenerated after migration
+
+## Confirmations before I build
+
+1. AI model: default to `google/gemini-2.5-pro` (best multimodal for reading photographed lab reports + PDFs). OK?
+2. Reminder threshold: show the checkup notification starting 7 days before it's due, and keep showing until dismissed or marked done. OK?
+3. Prescription dosage units — proposed list: mg, mcg, g, ml, tabs, capsules, puffs, drops, IU. Add/remove any?
