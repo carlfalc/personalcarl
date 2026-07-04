@@ -436,7 +436,7 @@ function LegCard({ leg, itineraryId, country, city }: { leg: Leg; itineraryId: s
       {expanded && (
         <div className="mt-3 space-y-3">
           {leg.type === "accommodation" ? (
-            <AccommodationFields local={local} setLocal={setLocal} setDetail={setDetail} commit={commit} country={country} city={city} legId={leg.id} />
+            <AccommodationFields local={local} setLocal={setLocal} setDetail={setDetail} commit={commit} country={country} city={city} legId={leg.id} itineraryId={itineraryId} />
           ) : (
             <TransportFields type={leg.type} local={local} setLocal={setLocal} setDetail={setDetail} commit={commit} />
           )}
