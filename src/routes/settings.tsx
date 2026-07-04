@@ -178,6 +178,9 @@ function SettingsPage() {
   const saveProfile = useMutation({
     mutationFn: async () => {
       if (!userId) throw new Error("Not signed in");
+      const tz = country
+        ? countries.find((c) => c.isoCode === country)?.timezones?.[0]?.zoneName ?? null
+        : null;
       const { error } = await supabase
         .from("profiles")
         .update({
@@ -186,6 +189,7 @@ function SettingsPage() {
           country: country || null,
           city: city || null,
           phone: phone.trim() || null,
+          timezone: tz,
         } as any)
         .eq("id", userId);
       if (error) throw error;
