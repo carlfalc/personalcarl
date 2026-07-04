@@ -1022,10 +1022,24 @@ function CityClockWeather({ countryIso, cityName }: { countryIso: string; cityNa
     return { lat, lon };
   }, [countryIso, cityName]);
 
+  const CACHE_MS = 6 * 60 * 60 * 1000; // 6 hours
+  const cacheKey = coords ? `itinerary-weather:${countryIso}:${cityName}` : null;
+
   const { data: forecast, isLoading, isError } = useQuery<Forecast | null>({
-    queryKey: ["itinerary-weather", countryIso, cityName, coords?.lat, coords?.lon],
+    queryKey: ["itinerary-weather", countryIso, cityName],
     enabled: !!coords,
-    staleTime: 15 * 60 * 1000,
+    staleTime: CACHE_MS,
+    gcTime: CACHE_MS,
+    initialData: () => {
+      if (!cacheKey || typeof window === "undefined") return undefined;
+      try {
+        const raw = window.localStorage.getItem(cacheKey);
+        if (!raw) return undefined;
+        const parsed = JSON.parse(raw) as { ts: number; data: Forecast };
+        if (Date.now() - parsed.ts > CACHE_MS) return undefined;
+        return parsed.data;
+      } catch { return undefined; }
+    },
     queryFn: async () => {
       if (!coords) return null;
       const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}` +
@@ -1037,7 +1051,7 @@ function CityClockWeather({ countryIso, cityName }: { countryIso: string; cityNa
       const json = await res.json();
       const d = json.daily ?? {};
       const dates: string[] = d.time ?? [];
-      return {
+      const result: Forecast = {
         timezone: json.timezone ?? "UTC",
         currentTempC: json.current?.temperature_2m ?? null,
         currentCode: json.current?.weather_code ?? null,
@@ -1049,8 +1063,13 @@ function CityClockWeather({ countryIso, cityName }: { countryIso: string; cityNa
           code: d.weather_code?.[i] ?? 0,
         })),
       };
+      if (cacheKey && typeof window !== "undefined") {
+        try { window.localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data: result })); } catch { /* ignore quota */ }
+      }
+      return result;
     },
   });
+
 
   const tz = forecast?.timezone ?? "UTC";
   const [now, setNow] = useState(() => new Date());
