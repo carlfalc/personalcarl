@@ -15,6 +15,7 @@ import {
   Users,
   Settings as SettingsIcon,
   Calculator as CalculatorIcon,
+  Plane,
   GripVertical,
   type LucideIcon,
 } from "lucide-react";
