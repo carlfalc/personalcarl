@@ -16,6 +16,7 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SchedulesRouteImport } from './routes/schedules'
 import { Route as RosterRouteImport } from './routes/roster'
 import { Route as MeetingsRouteImport } from './routes/meetings'
+import { Route as MedicalRouteImport } from './routes/medical'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ItineraryRouteImport } from './routes/itinerary'
 import { Route as ImagesRouteImport } from './routes/images'
@@ -60,6 +61,11 @@ const RosterRoute = RosterRouteImport.update({
 const MeetingsRoute = MeetingsRouteImport.update({
   id: '/meetings',
   path: '/meetings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MedicalRoute = MedicalRouteImport.update({
+  id: '/medical',
+  path: '/medical',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -124,6 +130,7 @@ export interface FileRoutesByFullPath {
   '/images': typeof ImagesRoute
   '/itinerary': typeof ItineraryRoute
   '/login': typeof LoginRoute
+  '/medical': typeof MedicalRoute
   '/meetings': typeof MeetingsRoute
   '/roster': typeof RosterRoute
   '/schedules': typeof SchedulesRoute
@@ -143,6 +150,7 @@ export interface FileRoutesByTo {
   '/images': typeof ImagesRoute
   '/itinerary': typeof ItineraryRoute
   '/login': typeof LoginRoute
+  '/medical': typeof MedicalRoute
   '/meetings': typeof MeetingsRoute
   '/roster': typeof RosterRoute
   '/schedules': typeof SchedulesRoute
@@ -163,6 +171,7 @@ export interface FileRoutesById {
   '/images': typeof ImagesRoute
   '/itinerary': typeof ItineraryRoute
   '/login': typeof LoginRoute
+  '/medical': typeof MedicalRoute
   '/meetings': typeof MeetingsRoute
   '/roster': typeof RosterRoute
   '/schedules': typeof SchedulesRoute
@@ -184,6 +193,7 @@ export interface FileRouteTypes {
     | '/images'
     | '/itinerary'
     | '/login'
+    | '/medical'
     | '/meetings'
     | '/roster'
     | '/schedules'
@@ -203,6 +213,7 @@ export interface FileRouteTypes {
     | '/images'
     | '/itinerary'
     | '/login'
+    | '/medical'
     | '/meetings'
     | '/roster'
     | '/schedules'
@@ -222,6 +233,7 @@ export interface FileRouteTypes {
     | '/images'
     | '/itinerary'
     | '/login'
+    | '/medical'
     | '/meetings'
     | '/roster'
     | '/schedules'
@@ -242,6 +254,7 @@ export interface RootRouteChildren {
   ImagesRoute: typeof ImagesRoute
   ItineraryRoute: typeof ItineraryRoute
   LoginRoute: typeof LoginRoute
+  MedicalRoute: typeof MedicalRoute
   MeetingsRoute: typeof MeetingsRoute
   RosterRoute: typeof RosterRoute
   SchedulesRoute: typeof SchedulesRoute
@@ -301,6 +314,13 @@ declare module '@tanstack/react-router' {
       path: '/meetings'
       fullPath: '/meetings'
       preLoaderRoute: typeof MeetingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/medical': {
+      id: '/medical'
+      path: '/medical'
+      fullPath: '/medical'
+      preLoaderRoute: typeof MedicalRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -386,6 +406,7 @@ const rootRouteChildren: RootRouteChildren = {
   ImagesRoute: ImagesRoute,
   ItineraryRoute: ItineraryRoute,
   LoginRoute: LoginRoute,
+  MedicalRoute: MedicalRoute,
   MeetingsRoute: MeetingsRoute,
   RosterRoute: RosterRoute,
   SchedulesRoute: SchedulesRoute,

@@ -405,6 +405,126 @@ export type Database = {
         }
         Relationships: []
       }
+      medical_blood_reports: {
+        Row: {
+          ai_report: Json
+          created_at: string
+          id: string
+          reported_at: string
+          source_paths: string[]
+          title: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ai_report: Json
+          created_at?: string
+          id?: string
+          reported_at?: string
+          source_paths?: string[]
+          title?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ai_report?: Json
+          created_at?: string
+          id?: string
+          reported_at?: string
+          source_paths?: string[]
+          title?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      medical_prescriptions: {
+        Row: {
+          created_at: string
+          dosage_amount: number | null
+          dosage_unit: string | null
+          frequency: string | null
+          id: string
+          name: string
+          notes: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          dosage_amount?: number | null
+          dosage_unit?: string | null
+          frequency?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          dosage_amount?: number | null
+          dosage_unit?: string | null
+          frequency?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      medical_profile: {
+        Row: {
+          checkup_frequency_months: number | null
+          clinic_address: string | null
+          clinic_name: string | null
+          clinic_phone: string | null
+          created_at: string
+          doctor_name: string | null
+          doctor_phone: string | null
+          email: string | null
+          id: string
+          last_visit_date: string | null
+          notes: string | null
+          updated_at: string
+          user_id: string
+          website: string | null
+        }
+        Insert: {
+          checkup_frequency_months?: number | null
+          clinic_address?: string | null
+          clinic_name?: string | null
+          clinic_phone?: string | null
+          created_at?: string
+          doctor_name?: string | null
+          doctor_phone?: string | null
+          email?: string | null
+          id?: string
+          last_visit_date?: string | null
+          notes?: string | null
+          updated_at?: string
+          user_id: string
+          website?: string | null
+        }
+        Update: {
+          checkup_frequency_months?: number | null
+          clinic_address?: string | null
+          clinic_name?: string | null
+          clinic_phone?: string | null
+          created_at?: string
+          doctor_name?: string | null
+          doctor_phone?: string | null
+          email?: string | null
+          id?: string
+          last_visit_date?: string | null
+          notes?: string | null
+          updated_at?: string
+          user_id?: string
+          website?: string | null
+        }
+        Relationships: []
+      }
       meeting_documents: {
         Row: {
           created_at: string

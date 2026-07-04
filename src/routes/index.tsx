@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cancelCalendarEvent, rescheduleCalendarEvent } from "@/lib/meetings.functions";
 import { BirthdayBanner } from "@/components/BirthdayBanner";
+import { CheckupBanner } from "@/components/CheckupBanner";
+
 import { GlobalSearch } from "@/components/GlobalSearch";
 import {
   GripVertical, Cloud, CloudRain, Sun, Check, X, CalendarClock, Lightbulb,
@@ -582,7 +584,9 @@ function TodayPage() {
     <div className="px-4 py-5 sm:px-6 sm:py-6 lg:px-8 space-y-5">
       <GlobalSearch />
       <BirthdayBanner />
+      <CheckupBanner />
       <WeekStrip />
+
 
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
