@@ -571,12 +571,40 @@ function BloodTestsCard() {
    Timeline + Compare
    ============================================================ */
 
+const COMPARE_STORAGE_KEY = "medical:compareSelection";
+
 function TimelineSection({ history, onDelete }: {
   history: Array<{ id: string; title: string | null; reported_at: string; ai_report: unknown }>;
   onDelete: (id: string) => void;
 }) {
   const [compareMode, setCompareMode] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
+
+  // Hydrate from localStorage
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(COMPARE_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { mode?: boolean; ids?: string[] };
+      const ids = (parsed.ids ?? []).slice(0, 2);
+      if (ids.length > 0) setSelected(ids);
+      if (parsed.mode) setCompareMode(true);
+    } catch { /* ignore */ }
+  }, []);
+
+  // Prune selections that no longer exist in history
+  useEffect(() => {
+    if (selected.length === 0) return;
+    const valid = selected.filter((id) => history.some((h) => h.id === id));
+    if (valid.length !== selected.length) setSelected(valid);
+  }, [history, selected]);
+
+  // Persist on change
+  useEffect(() => {
+    try {
+      localStorage.setItem(COMPARE_STORAGE_KEY, JSON.stringify({ mode: compareMode, ids: selected }));
+    } catch { /* ignore */ }
+  }, [compareMode, selected]);
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -593,23 +621,32 @@ function TimelineSection({ history, onDelete }: {
         .sort((a, b) => new Date(a.reported_at).getTime() - new Date(b.reported_at).getTime())
     : [];
 
+  const clearSelection = () => setSelected([]);
+
   return (
     <div className="pt-4 space-y-4">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">Timeline</h3>
-        <Button
-          variant={compareMode ? "default" : "outline"}
-          size="sm"
-          onClick={() => { setCompareMode((v) => !v); setSelected([]); }}
-        >
-          <GitCompare className="h-4 w-4 mr-1" />
-          {compareMode ? "Exit compare" : "Compare reports"}
-        </Button>
+        <div className="flex items-center gap-2">
+          {compareMode && selected.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={clearSelection}>
+              Clear ({selected.length})
+            </Button>
+          )}
+          <Button
+            variant={compareMode ? "default" : "outline"}
+            size="sm"
+            onClick={() => setCompareMode((v) => !v)}
+          >
+            <GitCompare className="h-4 w-4 mr-1" />
+            {compareMode ? "Exit compare" : "Compare reports"}
+          </Button>
+        </div>
       </div>
 
       {compareMode && (
         <p className="text-xs text-muted-foreground">
-          Select two reports to compare. {selected.length}/2 selected.
+          Select two reports to compare. {selected.length}/2 selected. Selection is saved for next visit.
         </p>
       )}
 
