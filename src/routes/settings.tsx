@@ -741,7 +741,7 @@ function PersonDialog({
             <div><Label htmlFor="fm-phone">Phone</Label>
               <Input id="fm-phone" value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
           </div>
-          <div><Label htmlFor="fm-bday">Birth date</Label>
+          <div><Label htmlFor="fm-bday">Birth date <span className="font-normal text-muted-foreground">— you'll receive notifications of the birthday</span></Label>
             <Input id="fm-bday" type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} />
             <p className="mt-1 text-xs text-muted-foreground">Birthdays within 7 days appear on the dashboard.</p>
           </div>
