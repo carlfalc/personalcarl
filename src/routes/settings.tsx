@@ -451,7 +451,7 @@ function SettingsPage() {
           <Card className="rounded-3xl border-border/60 bg-card px-5 shadow-sm">
             <AccordionTrigger className="py-4 hover:no-underline">
               <span className="flex items-center gap-2 text-base font-bold">
-                <span className="text-lg">💬</span> Telegram
+                <span className="text-lg">💬</span> Telegram <span className="text-xs text-muted-foreground font-normal">(enter your telegram details to integrate telegram)</span>
               </span>
             </AccordionTrigger>
             <AccordionContent className="pb-5 space-y-3">
