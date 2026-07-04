@@ -213,63 +213,6 @@ function SettingsPage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
 
-  // ---- Birthdays ----
-  const { data: birthdays = [] } = useQuery({
-    queryKey: ["birthdays", userId],
-    enabled: !!userId,
-    queryFn: async () => {
-      const { data, error } = await supabase.from("birthdays").select("*").order("birth_date", { ascending: true });
-      if (error) throw error;
-      return data as Birthday[];
-    },
-  });
-
-  const [form, setForm] = useState({ name: "", birth_date: "", notes: "" });
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const resetForm = () => { setForm({ name: "", birth_date: "", notes: "" }); setEditingId(null); };
-
-  const saveBirthday = useMutation({
-    mutationFn: async () => {
-      if (!userId) throw new Error("Not signed in");
-      if (!form.name.trim() || !form.birth_date) throw new Error("Name and date required");
-      if (editingId) {
-        const { error } = await supabase.from("birthdays").update({
-          name: form.name.trim(), birth_date: form.birth_date, notes: form.notes.trim() || null,
-        }).eq("id", editingId);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("birthdays").insert({
-          user_id: userId, name: form.name.trim(), birth_date: form.birth_date, notes: form.notes.trim() || null,
-        });
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["birthdays"] });
-      qc.invalidateQueries({ queryKey: ["birthdays-upcoming"] });
-      toast.success(editingId ? "Birthday updated" : "Birthday added");
-      resetForm();
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
-  });
-
-  const deleteBirthday = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("birthdays").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["birthdays"] });
-      qc.invalidateQueries({ queryKey: ["birthdays-upcoming"] });
-      toast.success("Birthday removed");
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
-  });
-
-  const startEdit = (b: Birthday) => {
-    setEditingId(b.id);
-    setForm({ name: b.name, birth_date: b.birth_date, notes: b.notes ?? "" });
-  };
 
   // ---- Avatar ----
   const avatarUrl = useAvatar();
@@ -502,77 +445,13 @@ function SettingsPage() {
 
       {/* Collapsible sections */}
       <Accordion type="multiple" className="space-y-4" defaultValue={[]}>
-        {/* Birthdays */}
-        <AccordionItem value="birthdays" className="border-none">
-          <Card className="rounded-3xl border-border/60 bg-card px-5 shadow-sm">
-            <AccordionTrigger className="py-4 hover:no-underline">
-              <span className="flex items-center gap-2 text-base font-bold">
-                <span className="text-lg">🎂</span> Birthdays
-                <span className="text-xs text-muted-foreground font-normal">· {birthdays.length}</span>
-              </span>
-            </AccordionTrigger>
-            <AccordionContent className="pb-5">
-              <div className="space-y-3 mb-5 rounded-2xl bg-muted/40 p-4">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <Label htmlFor="bday-name">Name</Label>
-                    <Input id="bday-name" value={form.name}
-                      onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Freya" />
-                  </div>
-                  <div>
-                    <Label htmlFor="bday-date">Date</Label>
-                    <Input id="bday-date" type="date" value={form.birth_date}
-                      onChange={(e) => setForm({ ...form, birth_date: e.target.value })} />
-                  </div>
-                </div>
-                <div>
-                  <Label htmlFor="bday-notes">Notes (optional)</Label>
-                  <Textarea id="bday-notes" value={form.notes}
-                    onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                    placeholder="Favourite cake, gift ideas…" rows={2} />
-                </div>
-                <div className="flex gap-2">
-                  <Button onClick={() => saveBirthday.mutate()} disabled={saveBirthday.isPending}>
-                    <Plus className="h-4 w-4 mr-1" />
-                    {editingId ? "Update birthday" : "Add birthday"}
-                  </Button>
-                  {editingId && (<Button variant="ghost" onClick={resetForm}>Cancel</Button>)}
-                </div>
-              </div>
-              {birthdays.length === 0 ? (
-                <p className="py-4 text-sm text-muted-foreground">No birthdays saved yet.</p>
-              ) : (
-                <div className="divide-y divide-border/60">
-                  {birthdays.map((b) => (
-                    <div key={b.id} className="flex items-center gap-3 py-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-semibold">{b.name}</div>
-                        <div className="text-xs text-muted-foreground tabular-nums">
-                          {format(new Date(b.birth_date), "d MMM yyyy")}
-                          {b.notes && <> · {b.notes}</>}
-                        </div>
-                      </div>
-                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => startEdit(b)} title="Edit">
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-red-600"
-                        onClick={() => deleteBirthday.mutate(b.id)} title="Delete">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </AccordionContent>
-          </Card>
-        </AccordionItem>
 
         {/* Telegram */}
         <AccordionItem value="telegram" className="border-none">
           <Card className="rounded-3xl border-border/60 bg-card px-5 shadow-sm">
             <AccordionTrigger className="py-4 hover:no-underline">
               <span className="flex items-center gap-2 text-base font-bold">
-                <span className="text-lg">💬</span> Telegram
+                <span className="text-lg">💬</span> Telegram <span className="text-xs text-muted-foreground font-normal">(enter your telegram details to integrate telegram)</span>
               </span>
             </AccordionTrigger>
             <AccordionContent className="pb-5 space-y-3">
@@ -601,7 +480,7 @@ function SettingsPage() {
               <div className="flex items-center justify-between">
                 <p className="text-xs text-muted-foreground">Daily summary of meetings, tasks, birthdays & weather.</p>
                 <input type="checkbox" className="h-5 w-5 accent-primary" checked={briefingEnabled}
-                  onChange={(e) => setBriefingEnabled(e.target.checked)} />
+                  onChange={(e) => { setBriefingEnabled(e.target.checked); saveBriefing.mutate({ enabled: e.target.checked, time: briefingTime }); }} />
               </div>
               <div className="flex items-end gap-2">
                 <div className="flex-1">
@@ -631,7 +510,7 @@ function SettingsPage() {
               <div className="flex items-center justify-between">
                 <p className="text-xs text-muted-foreground">Reminds you of tasks still open or overdue today.</p>
                 <input type="checkbox" className="h-5 w-5 accent-primary" checked={nudgeEnabled}
-                  onChange={(e) => setNudgeEnabled(e.target.checked)} />
+                  onChange={(e) => { setNudgeEnabled(e.target.checked); saveNudge.mutate({ enabled: e.target.checked, time: nudgeTime }); }} />
               </div>
               <div className="flex items-end gap-2">
                 <div className="flex-1">
@@ -862,7 +741,7 @@ function PersonDialog({
             <div><Label htmlFor="fm-phone">Phone</Label>
               <Input id="fm-phone" value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
           </div>
-          <div><Label htmlFor="fm-bday">Birth date</Label>
+          <div><Label htmlFor="fm-bday">Birth date <span className="font-normal text-muted-foreground">— you'll receive notifications of the birthday</span></Label>
             <Input id="fm-bday" type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} />
             <p className="mt-1 text-xs text-muted-foreground">Birthdays within 7 days appear on the dashboard.</p>
           </div>
