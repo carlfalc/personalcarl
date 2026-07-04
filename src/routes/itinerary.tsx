@@ -66,7 +66,7 @@ const LEG_ICONS: Record<LegType, typeof Plane> = {
 };
 
 function ItineraryPage() {
-  const { user } = useAuthSession();
+  const { userId } = useAuthSession();
   const qc = useQueryClient();
   useRealtimeTable("itineraries", ["itineraries"]);
   useRealtimeTable("itinerary_legs", ["itinerary-legs"]);
