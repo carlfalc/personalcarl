@@ -55,7 +55,7 @@ const items: Array<Item> = [
   { id: "today",     title: "Today",     subtitle: "Day at a glance",            url: "/",          icon: Sun },
   { id: "tasks",     title: "Tasks",     subtitle: "Things to do",               url: "/tasks",     icon: CheckSquare,   countKey: "tasks",    countColor: "red" },
   { id: "ideas",     title: "Ideas",     subtitle: "Capture & explore",          url: "/ideas",     icon: Lightbulb,     countKey: "ideas",    countColor: "green" },
-  { id: "todos",     title: "To-Dos",    subtitle: "Quick lists",                url: "/todos",     icon: ListTodo,      countKey: "todos",    countColor: "red" },
+  
   { id: "diary",     title: "Diary",     subtitle: "Notes & reflections",        url: "/diary",     icon: BookOpen },
   { id: "meetings",  title: "Meetings",  subtitle: "Calendar & agenda",          url: "/meetings",  icon: CalendarDays,  countKey: "meetings", countColor: "red" },
   { id: "email",     title: "Email",     subtitle: "Voice → Gmail drafts",       url: "/email",     icon: Mail },
