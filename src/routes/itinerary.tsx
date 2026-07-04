@@ -275,6 +275,12 @@ function ItineraryCard({ itinerary }: { itinerary: Itinerary }) {
           </div>
         </div>
 
+        {form.country && form.city && (
+          <CityClockWeather countryIso={form.country} cityName={form.city} />
+        )}
+
+
+
         <div>
           <Label className="mb-2 block">Travel modes (select one or more)</Label>
           <div className="flex flex-wrap gap-2">
@@ -967,3 +973,165 @@ function useMicDictation(onText: (t: string) => void) {
 
   return { listening, toggle, supported: !!supported };
 }
+
+// -------------- City clock + 5-day weather --------------
+const WEATHER_ICONS: Record<number, { emoji: string; label: string }> = {
+  0: { emoji: "☀️", label: "Clear" },
+  1: { emoji: "🌤", label: "Mostly clear" },
+  2: { emoji: "⛅️", label: "Partly cloudy" },
+  3: { emoji: "☁️", label: "Overcast" },
+  45: { emoji: "🌫", label: "Fog" },
+  48: { emoji: "🌫", label: "Rime fog" },
+  51: { emoji: "🌦", label: "Light drizzle" },
+  53: { emoji: "🌦", label: "Drizzle" },
+  55: { emoji: "🌧", label: "Dense drizzle" },
+  61: { emoji: "🌦", label: "Light rain" },
+  63: { emoji: "🌧", label: "Rain" },
+  65: { emoji: "🌧", label: "Heavy rain" },
+  71: { emoji: "🌨", label: "Light snow" },
+  73: { emoji: "🌨", label: "Snow" },
+  75: { emoji: "❄️", label: "Heavy snow" },
+  80: { emoji: "🌦", label: "Showers" },
+  81: { emoji: "🌧", label: "Showers" },
+  82: { emoji: "⛈", label: "Violent showers" },
+  95: { emoji: "⛈", label: "Thunderstorm" },
+  96: { emoji: "⛈", label: "Thunderstorm + hail" },
+  99: { emoji: "⛈", label: "Severe storm" },
+};
+
+function weatherIcon(code: number | null | undefined) {
+  if (code == null) return { emoji: "•", label: "—" };
+  return WEATHER_ICONS[code] ?? { emoji: "•", label: "—" };
+}
+
+type Forecast = {
+  timezone: string;
+  currentTempC: number | null;
+  currentCode: number | null;
+  daily: Array<{ date: string; tmax: number; tmin: number; precipPct: number; code: number }>;
+};
+
+function CityClockWeather({ countryIso, cityName }: { countryIso: string; cityName: string }) {
+  const coords = useMemo(() => {
+    const list = City.getCitiesOfCountry(countryIso) ?? [];
+    const c = list.find((x) => x.name === cityName);
+    if (!c) return null;
+    const lat = parseFloat(c.latitude ?? "");
+    const lon = parseFloat(c.longitude ?? "");
+    if (Number.isNaN(lat) || Number.isNaN(lon)) return null;
+    return { lat, lon };
+  }, [countryIso, cityName]);
+
+  const { data: forecast, isLoading, isError } = useQuery<Forecast | null>({
+    queryKey: ["itinerary-weather", countryIso, cityName, coords?.lat, coords?.lon],
+    enabled: !!coords,
+    staleTime: 15 * 60 * 1000,
+    queryFn: async () => {
+      if (!coords) return null;
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}` +
+        `&current=temperature_2m,weather_code` +
+        `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max` +
+        `&timezone=auto&forecast_days=5`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Weather ${res.status}`);
+      const json = await res.json();
+      const d = json.daily ?? {};
+      const dates: string[] = d.time ?? [];
+      return {
+        timezone: json.timezone ?? "UTC",
+        currentTempC: json.current?.temperature_2m ?? null,
+        currentCode: json.current?.weather_code ?? null,
+        daily: dates.map((date: string, i: number) => ({
+          date,
+          tmax: d.temperature_2m_max?.[i] ?? 0,
+          tmin: d.temperature_2m_min?.[i] ?? 0,
+          precipPct: d.precipitation_probability_max?.[i] ?? 0,
+          code: d.weather_code?.[i] ?? 0,
+        })),
+      };
+    },
+  });
+
+  const tz = forecast?.timezone ?? "UTC";
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const clock = useMemo(() => {
+    try {
+      const time = new Intl.DateTimeFormat("en-GB", {
+        timeZone: tz, hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+      }).format(now);
+      const date = new Intl.DateTimeFormat("en-GB", {
+        timeZone: tz, weekday: "short", day: "numeric", month: "short",
+      }).format(now);
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: tz, timeZoneName: "short",
+      }).formatToParts(now);
+      const tzShort = parts.find((p) => p.type === "timeZoneName")?.value ?? "";
+      return { time, date, tzShort };
+    } catch {
+      return { time: "--:--:--", date: "", tzShort: "" };
+    }
+  }, [now, tz]);
+
+  if (!coords) return null;
+
+  const current = weatherIcon(forecast?.currentCode);
+  const dayFmt = (iso: string) =>
+    new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: tz }).format(new Date(`${iso}T12:00:00Z`));
+
+  return (
+    <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="text-3xl leading-none">🕒</div>
+          <div>
+            <div className="text-xs uppercase tracking-wide text-muted-foreground">Local time in</div>
+            <div className="font-semibold text-base">{cityName}</div>
+            <div className="text-2xl font-mono tabular-nums leading-tight">{clock.time}</div>
+            <div className="text-xs text-muted-foreground">
+              {clock.date} · {tz.replace("_", " ")}{clock.tzShort ? ` (${clock.tzShort})` : ""}
+            </div>
+          </div>
+        </div>
+        {forecast?.currentTempC != null && (
+          <div className="flex items-center gap-3">
+            <div className="text-4xl leading-none">{current.emoji}</div>
+            <div>
+              <div className="text-2xl font-semibold leading-tight">{Math.round(forecast.currentTempC)}°C</div>
+              <div className="text-xs text-muted-foreground">{current.label}</div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div>
+        <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">5-day forecast</div>
+        {isLoading && <div className="text-xs text-muted-foreground">Loading forecast…</div>}
+        {isError && <div className="text-xs text-destructive">Couldn't load weather.</div>}
+        {forecast?.daily && (
+          <div className="grid grid-cols-5 gap-2">
+            {forecast.daily.slice(0, 5).map((d) => {
+              const w = weatherIcon(d.code);
+              return (
+                <div key={d.date} className="rounded-md border bg-background p-2 text-center">
+                  <div className="text-xs font-medium">{dayFmt(d.date)}</div>
+                  <div className="text-2xl leading-tight my-1" title={w.label}>{w.emoji}</div>
+                  <div className="text-xs tabular-nums">
+                    <span className="font-semibold">{Math.round(d.tmax)}°</span>
+                    <span className="text-muted-foreground"> / {Math.round(d.tmin)}°</span>
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">💧 {d.precipPct}%</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
