@@ -549,17 +549,19 @@ function BloodTestsCard() {
       )}
 
       {history.length > 0 && (
-        <div className="pt-2">
-          <h3 className="text-sm font-semibold mb-2">Saved reports</h3>
-          <ul className="space-y-2">
+        <div className="pt-4">
+          <h3 className="text-sm font-semibold mb-3">Timeline</h3>
+          <ol className="relative border-l-2 border-border pl-6 space-y-4">
             {history.map((h) => {
               const r = h.ai_report as unknown as BloodReport;
+              const abnormal = r?.results?.filter((x) => x.status === "abnormal").length ?? 0;
               return (
-                <HistoryRow
+                <TimelineItem
                   key={h.id}
-                  id={h.id}
                   title={h.title ?? "Blood test"}
-                  when={new Date(h.reported_at).toLocaleString()}
+                  when={new Date(h.reported_at)}
+                  abnormalCount={abnormal}
+                  totalCount={r?.results?.length ?? 0}
                   report={r}
                   onDelete={async () => {
                     await removeReport({ data: { id: h.id } });
@@ -568,39 +570,65 @@ function BloodTestsCard() {
                 />
               );
             })}
-          </ul>
+          </ol>
         </div>
       )}
     </Card>
   );
 }
 
-function HistoryRow({ id, title, when, report, onDelete }: { id: string; title: string; when: string; report: BloodReport; onDelete: () => void }) {
+function TimelineItem({ title, when, abnormalCount, totalCount, report, onDelete }: {
+  title: string; when: Date; abnormalCount: number; totalCount: number; report: BloodReport; onDelete: () => void;
+}) {
   const [open, setOpen] = useState(false);
+  const hasIssues = abnormalCount > 0;
+  const topNote = report?.overview?.[0]?.text;
   return (
-    <li className="rounded-xl border border-border">
-      <div className="flex items-center justify-between gap-2 p-3">
-        <button onClick={() => setOpen((o) => !o)} className="flex items-center gap-2 text-left flex-1 min-w-0">
-          {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          <div className="min-w-0">
-            <div className="font-medium truncate">{title}</div>
-            <div className="text-xs text-muted-foreground">{when}</div>
+    <li className="relative">
+      <span
+        className={cn(
+          "absolute -left-[31px] top-3 h-4 w-4 rounded-full border-2 border-background ring-2",
+          hasIssues ? "bg-amber-500 ring-amber-300" : "bg-emerald-500 ring-emerald-300"
+        )}
+      />
+      <div className="rounded-xl border border-border bg-card">
+        <div className="flex items-start justify-between gap-2 p-3">
+          <button onClick={() => setOpen((o) => !o)} className="flex items-start gap-2 text-left flex-1 min-w-0">
+            {open ? <ChevronDown className="h-4 w-4 mt-1" /> : <ChevronRight className="h-4 w-4 mt-1" />}
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-medium truncate">{title}</span>
+                {totalCount > 0 && (
+                  <Badge variant={hasIssues ? "destructive" : "secondary"} className={cn(!hasIssues && "text-emerald-700")}>
+                    {abnormalCount}/{totalCount} abnormal
+                  </Badge>
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {when.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+                {" • "}
+                {when.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+              </div>
+              {topNote && !open && (
+                <div className="mt-1 text-xs text-muted-foreground line-clamp-2">{topNote}</div>
+              )}
+            </div>
+          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            <Button size="icon" variant="ghost" onClick={() => downloadReportPdf(report)} title="Download PDF">
+              <Download className="h-4 w-4" />
+            </Button>
+            <Button size="icon" variant="ghost" onClick={onDelete} title="Delete">
+              <Trash2 className="h-4 w-4 text-destructive" />
+            </Button>
           </div>
-        </button>
-        <div className="flex items-center gap-1">
-          <Button size="icon" variant="ghost" onClick={() => downloadReportPdf(report)} title="Download PDF">
-            <Download className="h-4 w-4" />
-          </Button>
-          <Button size="icon" variant="ghost" onClick={onDelete} title="Delete">
-            <Trash2 className="h-4 w-4 text-destructive" />
-          </Button>
         </div>
+        {open && (
+          <div className="border-t border-border p-3">
+            <ReportBody report={report} />
+          </div>
+        )}
       </div>
-      {open && (
-        <div className="border-t border-border p-3">
-          <ReportBody report={report} />
-        </div>
-      )}
     </li>
   );
 }
@@ -738,6 +766,33 @@ function downloadReportPdf(report: BloodReport) {
   };
   const gap = (h = 8) => { y += h; };
 
+  const DEFAULT_QUESTIONS = [
+    "Which of these results are outside normal range and what could be causing them?",
+    "Do any of these findings need follow-up testing or a specialist referral?",
+    "Are there lifestyle, diet, or medication changes you'd recommend based on these results?",
+    "When should I repeat these tests to track progress?",
+  ];
+  const DEFAULT_DISCLAIMER =
+    "This overview is generated by AI from the documents you provided. It is for educational and informational purposes only and is NOT medical advice, diagnosis, or treatment. Always consult a qualified physician or healthcare professional about your results, symptoms, and any changes to medication or care.";
+
+  // Prominent disclaimer banner at the top of the PDF
+  doc.setFillColor(255, 243, 205);
+  doc.setDrawColor(217, 119, 6);
+  doc.roundedRect(margin, y, pageW - margin * 2, 54, 6, 6, "FD");
+  doc.setTextColor(120, 53, 15);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.text("NOT MEDICAL ADVICE", margin + 10, y + 16);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  const banner = doc.splitTextToSize(
+    "AI-generated overview for informational use only. Discuss all results with a qualified physician before acting on them.",
+    pageW - margin * 2 - 20,
+  );
+  doc.text(banner, margin + 10, y + 30);
+  doc.setTextColor(0, 0, 0);
+  y += 64;
+
   line("Blood Test Overview", 18, true);
   gap(4);
   line(report.patient.name || "Patient", 12, true);
@@ -755,7 +810,7 @@ function downloadReportPdf(report: BloodReport) {
   if (report.results.length > 0) {
     line("Results", 13, true);
     for (const r of report.results) {
-      const arrow = r.direction === "up" ? "↑" : r.direction === "down" ? "↓" : "";
+      const arrow = r.direction === "up" ? "^" : r.direction === "down" ? "v" : "";
       const status = r.status === "abnormal" ? "ABNORMAL" : "Normal";
       line(`• ${r.marker}: ${r.value} ${r.unit} ${arrow}  (range ${r.range}) — ${status}`, 11, false, 8);
       if (r.note) line(r.note, 10, false, 20);
@@ -763,14 +818,27 @@ function downloadReportPdf(report: BloodReport) {
     gap();
   }
 
-  if (report.questions.length > 0) {
-    line("Suggested questions for your physician", 13, true);
-    for (const q of report.questions) line(`• ${q}`, 11, false, 8);
-    gap();
-  }
+  const questions = report.questions.length > 0 ? report.questions : DEFAULT_QUESTIONS;
+  line("Suggested questions for your physician", 13, true);
+  for (const q of questions) line(`• ${q}`, 11, false, 8);
+  gap();
 
-  line("Disclaimer", 12, true);
-  line(report.disclaimer, 10);
+  // Full disclaimer footer
+  if (y > pageH - margin - 80) { doc.addPage(); y = margin; }
+  doc.setFillColor(255, 251, 235);
+  doc.setDrawColor(217, 119, 6);
+  const disclaimerText = report.disclaimer || DEFAULT_DISCLAIMER;
+  const wrapped = doc.splitTextToSize(disclaimerText, pageW - margin * 2 - 20);
+  const boxH = wrapped.length * 12 + 30;
+  doc.roundedRect(margin, y, pageW - margin * 2, boxH, 6, 6, "FD");
+  doc.setTextColor(120, 53, 15);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.text("Important — Not Medical Advice", margin + 10, y + 16);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.text(wrapped, margin + 10, y + 30);
+  doc.setTextColor(0, 0, 0);
 
   doc.save(`blood-report-${report.patient.date}.pdf`);
 }
