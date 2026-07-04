@@ -213,63 +213,6 @@ function SettingsPage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
 
-  // ---- Birthdays ----
-  const { data: birthdays = [] } = useQuery({
-    queryKey: ["birthdays", userId],
-    enabled: !!userId,
-    queryFn: async () => {
-      const { data, error } = await supabase.from("birthdays").select("*").order("birth_date", { ascending: true });
-      if (error) throw error;
-      return data as Birthday[];
-    },
-  });
-
-  const [form, setForm] = useState({ name: "", birth_date: "", notes: "" });
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const resetForm = () => { setForm({ name: "", birth_date: "", notes: "" }); setEditingId(null); };
-
-  const saveBirthday = useMutation({
-    mutationFn: async () => {
-      if (!userId) throw new Error("Not signed in");
-      if (!form.name.trim() || !form.birth_date) throw new Error("Name and date required");
-      if (editingId) {
-        const { error } = await supabase.from("birthdays").update({
-          name: form.name.trim(), birth_date: form.birth_date, notes: form.notes.trim() || null,
-        }).eq("id", editingId);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("birthdays").insert({
-          user_id: userId, name: form.name.trim(), birth_date: form.birth_date, notes: form.notes.trim() || null,
-        });
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["birthdays"] });
-      qc.invalidateQueries({ queryKey: ["birthdays-upcoming"] });
-      toast.success(editingId ? "Birthday updated" : "Birthday added");
-      resetForm();
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
-  });
-
-  const deleteBirthday = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("birthdays").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["birthdays"] });
-      qc.invalidateQueries({ queryKey: ["birthdays-upcoming"] });
-      toast.success("Birthday removed");
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
-  });
-
-  const startEdit = (b: Birthday) => {
-    setEditingId(b.id);
-    setForm({ name: b.name, birth_date: b.birth_date, notes: b.notes ?? "" });
-  };
 
   // ---- Avatar ----
   const avatarUrl = useAvatar();
