@@ -275,6 +275,12 @@ function ItineraryCard({ itinerary }: { itinerary: Itinerary }) {
           </div>
         </div>
 
+        {form.country && form.city && (
+          <CityClockWeather countryIso={form.country} cityName={form.city} />
+        )}
+
+
+
         <div>
           <Label className="mb-2 block">Travel modes (select one or more)</Label>
           <div className="flex flex-wrap gap-2">
