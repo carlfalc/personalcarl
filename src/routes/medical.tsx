@@ -644,8 +644,9 @@ function TimelineSection({ history, onDelete }: {
   );
 }
 
-function TimelineItem({ title, when, abnormalCount, totalCount, report, onDelete }: {
+function TimelineItem({ title, when, abnormalCount, totalCount, report, onDelete, selectable, selected, onToggleSelect }: {
   title: string; when: Date; abnormalCount: number; totalCount: number; report: BloodReport; onDelete: () => void;
+  selectable?: boolean; selected?: boolean; onToggleSelect?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const hasIssues = abnormalCount > 0;
@@ -658,8 +659,16 @@ function TimelineItem({ title, when, abnormalCount, totalCount, report, onDelete
           hasIssues ? "bg-amber-500 ring-amber-300" : "bg-emerald-500 ring-emerald-300"
         )}
       />
-      <div className="rounded-xl border border-border bg-card">
+      <div className={cn(
+        "rounded-xl border bg-card transition-colors",
+        selected ? "border-primary ring-2 ring-primary/30" : "border-border",
+      )}>
         <div className="flex items-start justify-between gap-2 p-3">
+          {selectable && (
+            <div className="pt-1">
+              <Checkbox checked={!!selected} onCheckedChange={() => onToggleSelect?.()} aria-label="Select for compare" />
+            </div>
+          )}
           <button onClick={() => setOpen((o) => !o)} className="flex items-start gap-2 text-left flex-1 min-w-0">
             {open ? <ChevronDown className="h-4 w-4 mt-1" /> : <ChevronRight className="h-4 w-4 mt-1" />}
             <div className="min-w-0">
@@ -697,6 +706,288 @@ function TimelineItem({ title, when, abnormalCount, totalCount, report, onDelete
         )}
       </div>
     </li>
+  );
+}
+
+/* ============================================================
+   Trend charts + Compare helpers
+   ============================================================ */
+
+function parseNumeric(s: string | number | null | undefined): number | null {
+  if (s == null) return null;
+  const str = String(s).replace(/,/g, "");
+  const m = str.match(/-?\d+(?:\.\d+)?/);
+  return m ? Number(m[0]) : null;
+}
+
+function parseRange(range: string | null | undefined): { low: number | null; high: number | null } {
+  if (!range) return { low: null, high: null };
+  const nums = String(range).match(/-?\d+(?:\.\d+)?/g);
+  if (!nums) return { low: null, high: null };
+  if (nums.length >= 2) return { low: Number(nums[0]), high: Number(nums[1]) };
+  const lower = range.toLowerCase();
+  if (lower.includes("<") || lower.includes("under")) return { low: null, high: Number(nums[0]) };
+  if (lower.includes(">") || lower.includes("over")) return { low: Number(nums[0]), high: null };
+  return { low: null, high: null };
+}
+
+function normalizeMarker(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+type HistoryRow = { id: string; title: string | null; reported_at: string; ai_report: unknown };
+
+function TrendCharts({ history }: { history: HistoryRow[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const sorted = useMemo(
+    () => [...history].sort((a, b) => new Date(a.reported_at).getTime() - new Date(b.reported_at).getTime()),
+    [history],
+  );
+
+  // Group values by marker across reports
+  const markers = useMemo(() => {
+    const map = new Map<string, {
+      name: string; unit: string; low: number | null; high: number | null;
+      points: Array<{ date: number; label: string; value: number; abnormal: boolean }>;
+      abnormalCount: number;
+    }>();
+    for (const h of sorted) {
+      const r = h.ai_report as BloodReport | null;
+      if (!r?.results) continue;
+      const dateMs = new Date(h.reported_at).getTime();
+      const label = new Date(h.reported_at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "2-digit" });
+      for (const res of r.results) {
+        const val = parseNumeric(res.value);
+        if (val == null) continue;
+        const key = normalizeMarker(res.marker);
+        if (!map.has(key)) {
+          const { low, high } = parseRange(res.range);
+          map.set(key, { name: res.marker, unit: res.unit ?? "", low, high, points: [], abnormalCount: 0 });
+        }
+        const entry = map.get(key)!;
+        entry.points.push({ date: dateMs, label, value: val, abnormal: res.status === "abnormal" });
+        if (res.status === "abnormal") entry.abnormalCount += 1;
+      }
+    }
+    return Array.from(map.values())
+      .filter((m) => m.points.length >= 2)
+      .sort((a, b) => b.abnormalCount - a.abnormalCount || b.points.length - a.points.length);
+  }, [sorted]);
+
+  if (markers.length === 0) return null;
+  const visible = expanded ? markers : markers.slice(0, 4);
+
+  return (
+    <div className="pt-2 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          <TrendingUp className="h-4 w-4" /> Marker trends
+        </h3>
+        {markers.length > 4 && (
+          <Button variant="ghost" size="sm" onClick={() => setExpanded((v) => !v)}>
+            {expanded ? "Show fewer" : `Show all (${markers.length})`}
+          </Button>
+        )}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {visible.map((m) => (
+          <MarkerChart key={m.name} marker={m} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MarkerChart({ marker }: {
+  marker: {
+    name: string; unit: string; low: number | null; high: number | null;
+    points: Array<{ date: number; label: string; value: number; abnormal: boolean }>;
+    abnormalCount: number;
+  };
+}) {
+  const values = marker.points.map((p) => p.value);
+  const rangeVals = [marker.low, marker.high].filter((v): v is number => v != null);
+  const min = Math.min(...values, ...rangeVals);
+  const max = Math.max(...values, ...rangeVals);
+  const pad = (max - min) * 0.15 || Math.abs(max) * 0.15 || 1;
+  const domain: [number, number] = [Number((min - pad).toFixed(2)), Number((max + pad).toFixed(2))];
+  const first = marker.points[0].value;
+  const last = marker.points[marker.points.length - 1].value;
+  const delta = last - first;
+  const pct = first !== 0 ? (delta / Math.abs(first)) * 100 : 0;
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-3">
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="min-w-0">
+          <div className="font-medium text-sm truncate">{marker.name}</div>
+          <div className="text-xs text-muted-foreground">
+            {marker.low != null || marker.high != null ? (
+              <>Range {marker.low ?? "–"}–{marker.high ?? "–"} {marker.unit}</>
+            ) : (
+              <>{marker.unit}</>
+            )}
+          </div>
+        </div>
+        <div className={cn(
+          "text-xs font-medium tabular-nums",
+          delta > 0 ? "text-amber-600" : delta < 0 ? "text-sky-600" : "text-muted-foreground",
+        )}>
+          {delta > 0 ? "▲" : delta < 0 ? "▼" : "•"} {delta.toFixed(2)} ({pct.toFixed(0)}%)
+        </div>
+      </div>
+      <div className="h-32">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={marker.points} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+            <XAxis dataKey="label" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+            <YAxis domain={domain} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={40} />
+            {marker.low != null && marker.high != null && (
+              <ReferenceArea y1={marker.low} y2={marker.high} fill="hsl(142 76% 45%)" fillOpacity={0.08} />
+            )}
+            <Tooltip
+              contentStyle={{ fontSize: 12, borderRadius: 8 }}
+              formatter={(v: number) => [`${v} ${marker.unit}`, marker.name]}
+            />
+            <Line
+              type="monotone"
+              dataKey="value"
+              stroke="hsl(var(--primary))"
+              strokeWidth={2}
+              dot={(props: any) => {
+                const p = marker.points[props.index];
+                return (
+                  <circle
+                    key={props.index}
+                    cx={props.cx}
+                    cy={props.cy}
+                    r={4}
+                    fill={p?.abnormal ? "hsl(0 84% 60%)" : "hsl(var(--primary))"}
+                    stroke="white"
+                    strokeWidth={1.5}
+                  />
+                );
+              }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+function ComparePanel({ older, newer }: {
+  older: { when: Date; report: BloodReport };
+  newer: { when: Date; report: BloodReport };
+}) {
+  const rows = useMemo(() => {
+    const map = new Map<string, {
+      marker: string; unit: string;
+      a?: { value: string; num: number | null; status: string; direction: string };
+      b?: { value: string; num: number | null; status: string; direction: string };
+    }>();
+    for (const r of older.report?.results ?? []) {
+      const key = normalizeMarker(r.marker);
+      map.set(key, {
+        marker: r.marker, unit: r.unit ?? "",
+        a: { value: r.value, num: parseNumeric(r.value), status: r.status, direction: r.direction },
+      });
+    }
+    for (const r of newer.report?.results ?? []) {
+      const key = normalizeMarker(r.marker);
+      const existing = map.get(key) ?? { marker: r.marker, unit: r.unit ?? "" };
+      existing.b = { value: r.value, num: parseNumeric(r.value), status: r.status, direction: r.direction };
+      if (!existing.unit) existing.unit = r.unit ?? "";
+      map.set(key, existing);
+    }
+    const arr = Array.from(map.values()).map((row) => {
+      const aAb = row.a?.status === "abnormal";
+      const bAb = row.b?.status === "abnormal";
+      const both = row.a?.num != null && row.b?.num != null;
+      const delta = both ? row.b!.num! - row.a!.num! : null;
+      const pct = both && row.a!.num !== 0 ? (delta! / Math.abs(row.a!.num!)) * 100 : null;
+      let flag: "improved" | "worsened" | "still_abnormal" | "new_abnormal" | "unchanged" = "unchanged";
+      if (aAb && !bAb) flag = "improved";
+      else if (!aAb && bAb) flag = "new_abnormal";
+      else if (aAb && bAb) flag = "still_abnormal";
+      return { ...row, delta, pct, flag, hasIssue: aAb || bAb };
+    });
+    // Sort: issues first, then alpha
+    return arr.sort((x, y) => Number(y.hasIssue) - Number(x.hasIssue) || x.marker.localeCompare(y.marker));
+  }, [older, newer]);
+
+  const issues = rows.filter((r) => r.hasIssue);
+  const fmt = (d: Date) => d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+
+  const FLAG_STYLE: Record<string, { label: string; cls: string }> = {
+    improved: { label: "Improved", cls: "bg-emerald-100 text-emerald-800" },
+    worsened: { label: "Worsened", cls: "bg-amber-100 text-amber-800" },
+    still_abnormal: { label: "Still abnormal", cls: "bg-red-100 text-red-800" },
+    new_abnormal: { label: "New abnormal", cls: "bg-red-100 text-red-800" },
+    unchanged: { label: "OK", cls: "bg-slate-100 text-slate-700" },
+  };
+
+  return (
+    <div className="rounded-2xl border border-primary/40 bg-primary/5 p-4 space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h4 className="text-sm font-semibold flex items-center gap-2">
+            <GitCompare className="h-4 w-4" /> Report comparison
+          </h4>
+          <p className="text-xs text-muted-foreground">
+            {fmt(older.when)} → {fmt(newer.when)} · {issues.length} marker{issues.length === 1 ? "" : "s"} needing attention
+          </p>
+        </div>
+      </div>
+      <div className="overflow-x-auto rounded-lg border border-border bg-background">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
+            <tr>
+              <th className="text-left px-3 py-2">Marker</th>
+              <th className="text-left px-3 py-2">{fmt(older.when)}</th>
+              <th className="text-left px-3 py-2">{fmt(newer.when)}</th>
+              <th className="text-left px-3 py-2">Change</th>
+              <th className="text-left px-3 py-2">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const s = FLAG_STYLE[row.flag];
+              return (
+                <tr key={row.marker} className={cn("border-t border-border", row.hasIssue && "bg-amber-50/50")}>
+                  <td className="px-3 py-2 font-medium">{row.marker}</td>
+                  <td className={cn("px-3 py-2 tabular-nums", row.a?.status === "abnormal" && "text-red-700 font-medium")}>
+                    {row.a ? `${row.a.value} ${row.unit}` : <span className="text-muted-foreground">—</span>}
+                  </td>
+                  <td className={cn("px-3 py-2 tabular-nums", row.b?.status === "abnormal" && "text-red-700 font-medium")}>
+                    {row.b ? `${row.b.value} ${row.unit}` : <span className="text-muted-foreground">—</span>}
+                  </td>
+                  <td className="px-3 py-2 tabular-nums">
+                    {row.delta != null ? (
+                      <span className={cn(
+                        "inline-flex items-center gap-1",
+                        row.delta > 0 ? "text-amber-700" : row.delta < 0 ? "text-sky-700" : "text-muted-foreground",
+                      )}>
+                        {row.delta > 0 ? <ArrowUp className="h-3 w-3" /> : row.delta < 0 ? <ArrowDown className="h-3 w-3" /> : null}
+                        {row.delta > 0 ? "+" : ""}{row.delta.toFixed(2)}
+                        {row.pct != null && <span className="text-xs text-muted-foreground">({row.pct > 0 ? "+" : ""}{row.pct.toFixed(0)}%)</span>}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium", s.cls)}>
+                      {s.label}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
