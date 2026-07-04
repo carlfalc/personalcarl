@@ -1240,3 +1240,117 @@ function downloadReportPdf(report: BloodReport) {
 
   doc.save(`blood-report-${report.patient.date}.pdf`);
 }
+
+type CompareRow = {
+  marker: string; unit: string;
+  a?: { value: string; num: number | null; status: string; direction: string };
+  b?: { value: string; num: number | null; status: string; direction: string };
+  delta: number | null; pct: number | null;
+  flag: "improved" | "worsened" | "still_abnormal" | "new_abnormal" | "unchanged";
+  hasIssue: boolean;
+};
+
+function downloadComparePdf(
+  older: { when: Date; report: BloodReport },
+  newer: { when: Date; report: BloodReport },
+  rows: CompareRow[],
+) {
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 40;
+  let y = margin;
+
+  const ensure = (h: number) => { if (y + h > pageH - margin) { doc.addPage(); y = margin; } };
+  const text = (s: string, size = 11, bold = false, indent = 0) => {
+    doc.setFont("helvetica", bold ? "bold" : "normal");
+    doc.setFontSize(size);
+    const wrapped = doc.splitTextToSize(s, pageW - margin * 2 - indent);
+    for (const w of wrapped) { ensure(size + 4); doc.text(w, margin + indent, y); y += size + 4; }
+  };
+  const gap = (h = 8) => { y += h; };
+  const fmt = (d: Date) => d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+
+  // Disclaimer banner
+  doc.setFillColor(255, 243, 205);
+  doc.setDrawColor(217, 119, 6);
+  doc.roundedRect(margin, y, pageW - margin * 2, 54, 6, 6, "FD");
+  doc.setTextColor(120, 53, 15);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.text("NOT MEDICAL ADVICE", margin + 10, y + 16);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.text(
+    doc.splitTextToSize(
+      "AI-assisted comparison for informational use only. Discuss all results with a qualified physician.",
+      pageW - margin * 2 - 20,
+    ),
+    margin + 10, y + 30,
+  );
+  doc.setTextColor(0, 0, 0);
+  y += 64;
+
+  text("Blood Test Comparison", 18, true);
+  gap(4);
+  text(`Comparing ${fmt(older.when)}  →  ${fmt(newer.when)}`, 11);
+  const patient = newer.report.patient?.name || older.report.patient?.name;
+  if (patient) text(patient, 11, true);
+  gap();
+
+  // Summary counts
+  const issues = rows.filter((r) => r.hasIssue);
+  const improved = rows.filter((r) => r.flag === "improved").length;
+  const newAb = rows.filter((r) => r.flag === "new_abnormal").length;
+  const stillAb = rows.filter((r) => r.flag === "still_abnormal").length;
+  text("Summary", 13, true);
+  text(`• ${issues.length} marker(s) flagged across both reports`, 11, false, 8);
+  text(`• ${improved} improved (abnormal → normal)`, 11, false, 8);
+  text(`• ${newAb} newly abnormal`, 11, false, 8);
+  text(`• ${stillAb} still abnormal`, 11, false, 8);
+  gap();
+
+  const FLAG_LABEL: Record<CompareRow["flag"], string> = {
+    improved: "IMPROVED", worsened: "WORSENED", still_abnormal: "STILL ABNORMAL",
+    new_abnormal: "NEW ABNORMAL", unchanged: "OK",
+  };
+
+  const renderSection = (title: string, list: CompareRow[]) => {
+    if (list.length === 0) return;
+    text(title, 13, true);
+    for (const r of list) {
+      const a = r.a ? `${r.a.value} ${r.unit}` : "—";
+      const b = r.b ? `${r.b.value} ${r.unit}` : "—";
+      const delta = r.delta != null ? `${r.delta > 0 ? "+" : ""}${r.delta.toFixed(2)}${r.pct != null ? ` (${r.pct > 0 ? "+" : ""}${r.pct.toFixed(0)}%)` : ""}` : "—";
+      text(`• ${r.marker}  [${FLAG_LABEL[r.flag]}]`, 11, true, 8);
+      text(`${fmt(older.when)}: ${a}   →   ${fmt(newer.when)}: ${b}   Δ ${delta}`, 10, false, 20);
+    }
+    gap();
+  };
+
+  const highlighted = rows.filter((r) => r.hasIssue);
+  const normal = rows.filter((r) => !r.hasIssue);
+  renderSection("Differences to discuss (abnormal in either report)", highlighted);
+  renderSection("Other markers", normal);
+
+  // Full disclaimer footer
+  ensure(90);
+  doc.setFillColor(255, 251, 235);
+  doc.setDrawColor(217, 119, 6);
+  const disc = newer.report.disclaimer || older.report.disclaimer ||
+    "This comparison is AI-generated from the documents you provided. It is for educational and informational purposes only and is NOT medical advice, diagnosis, or treatment. Always consult a qualified physician about your results.";
+  const wrapped = doc.splitTextToSize(disc, pageW - margin * 2 - 20);
+  const boxH = wrapped.length * 12 + 30;
+  doc.roundedRect(margin, y, pageW - margin * 2, boxH, 6, 6, "FD");
+  doc.setTextColor(120, 53, 15);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.text("Important — Not Medical Advice", margin + 10, y + 16);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.text(wrapped, margin + 10, y + 30);
+  doc.setTextColor(0, 0, 0);
+
+  const stamp = `${older.when.toISOString().slice(0, 10)}_vs_${newer.when.toISOString().slice(0, 10)}`;
+  doc.save(`blood-comparison-${stamp}.pdf`);
+}
