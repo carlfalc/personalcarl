@@ -60,11 +60,10 @@ const items: Array<Item> = [
   { id: "meetings",  title: "Meetings",  subtitle: "Calendar & agenda",          url: "/meetings",  icon: CalendarDays,  countKey: "meetings", countColor: "red" },
   { id: "email",     title: "Email",     subtitle: "Voice → Gmail drafts",       url: "/email",     icon: Mail },
   { id: "images",    title: "Images",    subtitle: "Photos from Telegram",       url: "/images",    icon: ImageIcon,     countKey: "images",   countColor: "black" },
-  { id: "about",     title: "About Me",  subtitle: "Profile & memory",           url: "/about",     icon: UserCircle2 },
   { id: "schedules", title: "Schedules", subtitle: "Recurring AI briefings",     url: "/schedules", icon: Clock },
   { id: "roster",    title: "Roster",    subtitle: "Glasshouse weekly roster",   url: "/roster",    icon: Users },
   { id: "training",  title: "Training Roster", subtitle: "Weekly training schedule", url: "/training-roster", icon: Users },
-  { id: "settings",  title: "Settings",  subtitle: "Telegram & birthdays",       url: "/settings",  icon: SettingsIcon },
+  { id: "settings",  title: "Settings / About Me", subtitle: "Profile, contacts & briefings", url: "/settings", icon: SettingsIcon },
   { id: "calculator", title: "Calculator", subtitle: "Tools & calculators",       url: "/calculator", icon: CalculatorIcon },
 ];
 
