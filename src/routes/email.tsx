@@ -227,12 +227,18 @@ function EmailPage() {
               <Label htmlFor="to">To</Label>
               <Input
                 id="to"
+                ref={toRef}
                 value={to}
                 onChange={(e) => setTo(e.target.value)}
                 onFocus={() => setShowSuggest(true)}
                 onBlur={() => window.setTimeout(() => setShowSuggest(false), 150)}
                 placeholder="Type a name or email — searches your past Gmail recipients"
               />
+              {!to.trim() && (body.trim() || subject.trim()) && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  Unable to find email — add manually before saving to Gmail Drafts.
+                </p>
+              )}
               {showSuggest && suggestions.length > 0 && (
                 <div className="absolute z-10 left-0 right-0 mt-1 bg-popover border rounded-md shadow-md max-h-60 overflow-auto">
                   {suggestions.map((s) => (
