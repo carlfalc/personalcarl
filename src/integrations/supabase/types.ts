@@ -408,7 +408,10 @@ export type Database = {
           avatar_url: string | null
           briefing_enabled: boolean
           briefing_time: string
+          city: string | null
+          country: string | null
           created_at: string
+          date_of_birth: string | null
           diary_summary_enabled: boolean
           display_name: string
           gmail_connection_id: string | null
@@ -424,6 +427,7 @@ export type Database = {
           last_weekly_review_sent: string | null
           nudge_enabled: boolean
           nudge_time: string
+          phone: string | null
           telegram_chat_id: string | null
           updated_at: string
           weekly_review_day: number
@@ -434,7 +438,10 @@ export type Database = {
           avatar_url?: string | null
           briefing_enabled?: boolean
           briefing_time?: string
+          city?: string | null
+          country?: string | null
           created_at?: string
+          date_of_birth?: string | null
           diary_summary_enabled?: boolean
           display_name?: string
           gmail_connection_id?: string | null
@@ -450,6 +457,7 @@ export type Database = {
           last_weekly_review_sent?: string | null
           nudge_enabled?: boolean
           nudge_time?: string
+          phone?: string | null
           telegram_chat_id?: string | null
           updated_at?: string
           weekly_review_day?: number
@@ -460,7 +468,10 @@ export type Database = {
           avatar_url?: string | null
           briefing_enabled?: boolean
           briefing_time?: string
+          city?: string | null
+          country?: string | null
           created_at?: string
+          date_of_birth?: string | null
           diary_summary_enabled?: boolean
           display_name?: string
           gmail_connection_id?: string | null
@@ -476,6 +487,7 @@ export type Database = {
           last_weekly_review_sent?: string | null
           nudge_enabled?: boolean
           nudge_time?: string
+          phone?: string | null
           telegram_chat_id?: string | null
           updated_at?: string
           weekly_review_day?: number

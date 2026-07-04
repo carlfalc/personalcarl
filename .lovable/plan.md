@@ -1,29 +1,57 @@
-## Goal
-Make Telegram voice/text → Gmail drafts a single step: always draft immediately, always send a Telegram confirmation, always push the draft into the `/email` page. When no recipient is found, still create the draft and mark it "needs recipient — add manually" on the Email page. Also make sure typed triggers like "draft email" / "email draft" on Telegram start the same flow.
+# Merge Settings & About Me → single "Settings / About Me" page
 
-## Changes
+## Route & navigation
+- Create new route `src/routes/settings.tsx` (replacing current) at `/settings`, titled **"Settings / About Me"**.
+- Delete `src/routes/about.tsx`; add a redirect from `/about` → `/settings` so old links still work.
+- Sidebar: remove the separate "About Me" entry; keep a single "Settings / About Me" item (using the existing Settings icon).
 
-### 1. `supabase/functions/telegram-webhook/index.ts` — one-shot email flow
-- Extend `SYSTEM_PROMPT.email_intents` to also carry `recipient_email` (if an @ address was dictated) and `content` (the full ask), not just `recipient_query`.
-- Detect typed triggers alongside Claude: a regex for `draft (an )?email|email draft|compose (an )?email|write (an )?email` short-circuits into the drafting path even when Claude's parse is weak.
-- Replace the current two-step `awaiting_recipient` → `awaiting_content` flow (via `pending_email_intents`) with a single step:
-  1. Resolve recipient: explicit email in the message → top Gmail Sent-folder match → none.
-  2. `composeEmail(fullTranscript)` → `{ subject, body }`.
-  3. Call `createGmailDraft` (existing helper). If no recipient, build the RFC 2822 message **without a `To:` header** so Gmail stores it as a draft with no recipient.
-  4. Insert into `drafts_log` (owner_id, gmail_draft_id, recipient nullable, subject, body_preview).
-  5. Always `sendTelegram(...)` a confirmation:
-     - With recipient: "✅ Draft ready for Name <email>. Subject: X — open the Email page or Gmail Drafts to review."
-     - Without recipient: "✅ Draft written but I couldn't find an email address. Open the Email page to add the recipient and save."
-- Wrap the compose+draft in try/catch that always emits a Telegram failure message so the user is never left in silence.
-- Keep the old `pending_email_intents` code paths as no-op fallbacks (don't insert new pending rows going forward).
+## Page layout (top → bottom)
 
-### 2. `src/routes/email.tsx` — surface "needs recipient" drafts
-- In the "Completed drafts" sidebar, show an amber "Needs recipient" badge on any item whose `recipient` is null.
-- Clicking such a draft loads it into compose (already works) with the `To` field empty and focused, and shows an inline amber hint under the To field: "Add a recipient before saving to Gmail Drafts."
-- Add a light 15s refetch on the drafts list so Telegram-created drafts appear without manual reload.
-- Small copy tweak on the mic/polish flow: after "Polish into email" toast, add hint text under Body: "Ready to review — edit and Save to Gmail Drafts."
+**1. Profile card** (always open at top)
+- Avatar upload (existing behaviour, kept as-is).
+- Editable **Name** (inline pencil, saved to `profiles.display_name`).
+- **Date of birth** (date input, saved to `profiles.date_of_birth`).
+- **Country** dropdown (searchable, all 195 countries from a bundled list).
+- **City** dropdown that populates based on selected country.
+  - Approach: use the `country-state-city` npm package (~2MB, bundled) so we get all countries + cities offline with no API key. Cities load only for the picked country, so runtime cost is small.
+- Optional contact fields: email (read-only from auth), phone.
+- Save button persists all profile fields at once.
+
+**2. Important people** (collapsible, open by default)
+- Contact list of family / close friends: name, relationship, birthday, phone, email.
+- Reuses the existing `memory` table entries where `category = 'family'` (already stores name, relationship, contact_email, contact_phone, birth_date).
+- Add / edit / delete rows inline; keeps the existing FamilyDialog behaviour, just inline on the page instead of a separate About tab.
+- The other About-Me categories (interests, projects, preferences, business, technology, travel) move into a secondary collapsible "About me notes" section further down — kept, not lost.
+
+**3. Birthdays** (collapsible, above cron settings)
+- Existing birthdays table UI moved here, wrapped in an accordion so it can be opened/closed.
+- Add / edit / delete birthdays unchanged.
+
+**4. Telegram** (collapsible)
+- Chat ID + save button, unchanged.
+
+**5. Scheduled briefings** (each in its own collapsible sub-section within Telegram or as siblings — I'll keep them as siblings for clarity):
+- Morning briefing, Evening nudge, Weekly review, Grocery send, Daily diary summary — each is its own collapsible card, all closed by default except any that are enabled.
+
+## Database
+One migration adds two nullable columns to `profiles`:
+- `date_of_birth date`
+- `country text`
+- `city text`
+- `phone text`
+
+No RLS changes (existing profile policies already cover the owner).
+
+## Technical details
+- Use `<Accordion>` from shadcn (`@/components/ui/accordion`) for all collapsible sections — single component, consistent look, open/close state remembered per session via `defaultValue`.
+- Country/city data: install `country-state-city` and lazy-load city list on country change.
+- Keep the existing avatar upload, birthday CRUD, and Telegram/cron save mutations as-is — just re-arranged in the new layout.
+- Update `AppSidebar.tsx`: remove the About entry, rename Settings item to "Settings / About Me".
+- Regenerate route tree implicitly via Vite plugin.
 
 ## Out of scope
-- No DB schema changes (`drafts_log.recipient` is already nullable).
-- No Gmail attachments from Telegram, no editing the Gmail draft in place after Telegram creates it (Email page save creates a fresh draft, unchanged).
-- Multi-candidate recipient picker on Telegram (one-shot uses only the top match).
+- No changes to how the assistant reads memory (still queries `memory` table).
+- No changes to birthday notifications or Telegram flows.
+- No changes to the auth email field editability.
+
+After you approve, I'll implement in one pass and you can review.
