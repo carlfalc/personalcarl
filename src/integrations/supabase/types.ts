@@ -221,6 +221,69 @@ export type Database = {
         }
         Relationships: []
       }
+      itinerary_favorite_places: {
+        Row: {
+          address: string | null
+          category: string | null
+          created_at: string
+          distance_label: string | null
+          distance_meters: number | null
+          id: string
+          itinerary_id: string
+          leg_id: string
+          name: string
+          notes: string | null
+          updated_at: string
+          user_id: string
+          why: string | null
+        }
+        Insert: {
+          address?: string | null
+          category?: string | null
+          created_at?: string
+          distance_label?: string | null
+          distance_meters?: number | null
+          id?: string
+          itinerary_id: string
+          leg_id: string
+          name: string
+          notes?: string | null
+          updated_at?: string
+          user_id: string
+          why?: string | null
+        }
+        Update: {
+          address?: string | null
+          category?: string | null
+          created_at?: string
+          distance_label?: string | null
+          distance_meters?: number | null
+          id?: string
+          itinerary_id?: string
+          leg_id?: string
+          name?: string
+          notes?: string | null
+          updated_at?: string
+          user_id?: string
+          why?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "itinerary_favorite_places_itinerary_id_fkey"
+            columns: ["itinerary_id"]
+            isOneToOne: false
+            referencedRelation: "itineraries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "itinerary_favorite_places_leg_id_fkey"
+            columns: ["leg_id"]
+            isOneToOne: false
+            referencedRelation: "itinerary_legs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       itinerary_legs: {
         Row: {
           arrive_at: string | null
