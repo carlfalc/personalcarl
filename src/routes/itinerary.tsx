@@ -6,7 +6,7 @@ import { Country, City } from "country-state-city";
 import { toast } from "sonner";
 import {
   Plus, Trash2, Plane, Train, Bus, Car, Hotel, MapPin, Mic, MicOff,
-  ChevronDown, ChevronRight, Info, ExternalLink, Sparkles,
+  ChevronDown, ChevronRight, Info, ExternalLink, Sparkles, Star, StarOff, Pencil,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthSession } from "@/hooks/useAuthSession";
