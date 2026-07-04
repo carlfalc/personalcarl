@@ -54,7 +54,7 @@ interface ParsedNote {
     relationship?: string | null;
     birth_date?: string | null;
   }>;
-  email_intents: Array<{ recipient_query: string }>;
+  email_intents: Array<{ recipient_query: string; recipient_email?: string | null; content?: string | null }>;
 }
 
 const EMPTY: ParsedNote = { entries: [], meetings: [], memory: [], email_intents: [] };
@@ -65,11 +65,12 @@ const SYSTEM_PROMPT = `You parse a personal-assistant voice note into structured
   entries: [{ type: 'task'|'idea'|'todo'|'diary', content: string, tags: string[], priority: 1|2|3, due_date: string|null }],
   meetings: [{ title: string, datetime: string, location: string|null, notes: string|null }],
   memory: [{ fact: string, category: 'interest'|'project'|'preference'|'family'|'business'|'technology'|'travel', confidence: number, contact_email: string|null, contact_phone: string|null, relationship: string|null, birth_date: string|null }],
-  email_intents: [{ recipient_query: string }]
+  email_intents: [{ recipient_query: string, recipient_email: string|null, content: string|null }]
 }
 
 Rules:
-- email_intents: include ONLY when the user clearly asks to email/send something to someone (e.g. "send email to kitchen", "email Sarah"). recipient_query is the name/word the user used to refer to the recipient. Do NOT invent a subject or body — those are gathered in a follow-up step.
+- email_intents: include when the user asks to draft/send/write/email something. recipient_query = the name/word they used for the recipient (e.g. "Kitchen", "Sarah") or "" if none given. recipient_email = a literal email address if they dictated one, else null. content = the actual message they want the email to say (everything after the recipient reference), or null if they didn't dictate content.
+- Trigger phrases include: "draft email", "email draft", "send email", "write an email", "compose email", "email to ...".
 - Never include email_intents for tasks, todos, meetings, ideas, diary notes, family/contact updates, birthdays, or generic "stop/cancel" messages.
 - Tasks/to-dos → entries. Ideas → entries with type "idea". Scheduled calendar appointments → meetings. Durable facts → memory. Reflective notes → diary entries.
 - Family/contact commands such as "add my sister Jane" or "add family name Jane" → memory with category "family". Put the person's name in fact if that is all you know, and fill contact_email, contact_phone, relationship, and birth_date only when provided.
@@ -540,14 +541,12 @@ function base64url(input: string): string {
     .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-async function createGmailDraft(args: { to: string; subject: string; body: string }): Promise<string> {
-  const rfc2822 = [
-    `To: ${args.to}`,
-    `Subject: ${args.subject}`,
-    'Content-Type: text/plain; charset="UTF-8"',
-    "",
-    args.body,
-  ].join("\r\n");
+async function createGmailDraft(args: { to: string | null; subject: string; body: string }): Promise<string> {
+  const headers: string[] = [];
+  if (args.to && args.to.trim()) headers.push(`To: ${args.to.trim()}`);
+  headers.push(`Subject: ${args.subject}`);
+  headers.push('Content-Type: text/plain; charset="UTF-8"');
+  const rfc2822 = [...headers, "", args.body].join("\r\n");
   const res = await fetch(`${GATEWAY}/google_mail/gmail/v1/users/me/drafts`, {
     method: "POST",
     headers: {
@@ -563,6 +562,68 @@ async function createGmailDraft(args: { to: string; subject: string; body: strin
   }
   const draft = await res.json();
   return draft.id ?? "";
+}
+
+// One-shot: resolve recipient (explicit email > top Gmail match > none),
+// compose subject/body, save Gmail draft, log to drafts_log, notify Telegram.
+async function runOneShotEmail(
+  supabase: ReturnType<typeof createClient>,
+  chatId: number,
+  transcript: string,
+  hint: { recipientQuery?: string | null; explicitEmail?: string | null; content?: string | null },
+): Promise<void> {
+  try {
+    const contentForCompose = (hint.content && hint.content.trim()) ? hint.content.trim() : transcript;
+
+    let recipientEmail: string | null = hint.explicitEmail?.trim() || null;
+    let recipientName: string | null = null;
+    if (!recipientEmail) {
+      const inline = transcript.match(EMAIL_RE);
+      if (inline) recipientEmail = inline[0];
+    }
+    if (!recipientEmail && hint.recipientQuery && hint.recipientQuery.trim()) {
+      const matches = await lookupRecipientsInGmail(hint.recipientQuery.trim());
+      if (matches[0]) {
+        recipientEmail = matches[0].email;
+        recipientName = matches[0].name || null;
+      }
+    }
+
+    const { subject, body } = await composeEmail(contentForCompose);
+    const draftId = await createGmailDraft({ to: recipientEmail, subject, body });
+
+    const { data: owner } = await supabase
+      .from("profiles")
+      .select("id")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (owner?.id) {
+      await supabase.from("drafts_log").insert({
+        user_id: owner.id,
+        gmail_draft_id: draftId,
+        recipient: recipientEmail,
+        subject,
+        body_preview: body.slice(0, 200),
+      });
+    }
+
+    if (recipientEmail) {
+      const who = recipientName ? `${recipientName} <${recipientEmail}>` : recipientEmail;
+      await sendTelegram(
+        chatId,
+        `✅ Draft ready for ${who}.\nSubject: ${subject}\n\nReview on the Email page or open Gmail Drafts: https://mail.google.com/mail/u/0/#drafts`,
+      );
+    } else {
+      await sendTelegram(
+        chatId,
+        `✅ Draft written but I couldn't find an email address.\nSubject: ${subject}\n\nOpen the Email page to add the recipient and save it to Gmail Drafts.`,
+      );
+    }
+  } catch (e) {
+    console.error("runOneShotEmail failed", e);
+    await sendTelegram(chatId, `⚠️ Couldn't draft that email: ${e instanceof Error ? e.message : "unknown"}`);
+  }
 }
 
 // ---------- Email flow ----------
@@ -927,6 +988,19 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Typed trigger shortcut: "draft email", "email draft", "compose/write an email"
+    const emailTrigger = transcript.match(/\b(draft(?:\s+an?)?\s+email|email\s+draft|compose\s+an?\s+email|write\s+an?\s+email|send\s+an?\s+email)\b/i);
+    if (emailTrigger) {
+      await runOneShotEmail(supabase, chatId, transcript, {
+        recipientQuery: null,
+        explicitEmail: null,
+        content: transcript,
+      });
+      return new Response(JSON.stringify({ ok: true, handled: "email_trigger" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Active family profile follow-up, unless this is clearly a new command
     const { data: familyPendingRows } = await supabase
       .from("pending_family_profiles")
@@ -1158,10 +1232,14 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Start at most one email flow per message (simplest UX)
+    // Start at most one email flow per message (one-shot: draft immediately)
     const firstIntent = parsed.email_intents[0];
-    if (firstIntent?.recipient_query) {
-      await startRecipientFlow(supabase, chatId, firstIntent.recipient_query);
+    if (firstIntent) {
+      await runOneShotEmail(supabase, chatId, transcript, {
+        recipientQuery: firstIntent.recipient_query ?? null,
+        explicitEmail: firstIntent.recipient_email ?? null,
+        content: firstIntent.content ?? null,
+      });
     }
 
     const summary = summarise(parsed, firstIntent ? 1 : 0);

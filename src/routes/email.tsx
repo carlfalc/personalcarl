@@ -32,7 +32,7 @@ function EmailPage() {
   const lookup = useServerFn(lookupRecipient);
   const getAtts = useServerFn(getImagesForAttach);
 
-  const draftsQ = useQuery({ queryKey: ["recent-drafts"], queryFn: () => listDrafts() });
+  const draftsQ = useQuery({ queryKey: ["recent-drafts"], queryFn: () => listDrafts(), refetchInterval: 15000, refetchOnWindowFocus: true });
 
   const [recording, setRecording] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -162,12 +162,18 @@ function EmailPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const toRef = useRef<HTMLInputElement | null>(null);
   const loadDraft = (d: { recipient: string | null; subject: string | null; body_preview: string | null }) => {
     setTo(d.recipient ?? "");
     setSubject(d.subject ?? "");
     setBody(d.body_preview ?? "");
     setTranscript("");
-    toast.info("Loaded into compose — edit and re-save");
+    if (!d.recipient) {
+      toast.info("Draft loaded — add a recipient before saving to Gmail Drafts");
+      window.setTimeout(() => toRef.current?.focus(), 50);
+    } else {
+      toast.info("Loaded into compose — edit and re-save");
+    }
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -221,12 +227,18 @@ function EmailPage() {
               <Label htmlFor="to">To</Label>
               <Input
                 id="to"
+                ref={toRef}
                 value={to}
                 onChange={(e) => setTo(e.target.value)}
                 onFocus={() => setShowSuggest(true)}
                 onBlur={() => window.setTimeout(() => setShowSuggest(false), 150)}
                 placeholder="Type a name or email — searches your past Gmail recipients"
               />
+              {!to.trim() && (body.trim() || subject.trim()) && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  Unable to find email — add manually before saving to Gmail Drafts.
+                </p>
+              )}
               {showSuggest && suggestions.length > 0 && (
                 <div className="absolute z-10 left-0 right-0 mt-1 bg-popover border rounded-md shadow-md max-h-60 overflow-auto">
                   {suggestions.map((s) => (
@@ -321,6 +333,11 @@ function EmailPage() {
                     <div className="text-xs text-muted-foreground line-clamp-1">
                       {d.recipient || "(no recipient)"}
                     </div>
+                    {!d.recipient && (
+                      <span className="inline-block mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                        Needs recipient — add manually
+                      </span>
+                    )}
                     <div className="text-[10px] text-muted-foreground mt-0.5">
                       {new Date(d.created_at).toLocaleString()}
                     </div>

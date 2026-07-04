@@ -1,38 +1,29 @@
 ## Goal
-Make arranging a meeting feel effortless: type-to-add attendees with validation and recent-contact suggestions, then show who accepted/declined right on the meeting card. Invites continue to come from your connected Google Calendar account (`sendUpdates=all` is already on, so Gmail/Outlook/Apple recipients all get a normal accept/decline invite).
+Make Telegram voice/text → Gmail drafts a single step: always draft immediately, always send a Telegram confirmation, always push the draft into the `/email` page. When no recipient is found, still create the draft and mark it "needs recipient — add manually" on the Email page. Also make sure typed triggers like "draft email" / "email draft" on Telegram start the same flow.
 
-## What changes
+## Changes
 
-### 1. Better attendee UX (in `src/routes/meetings.tsx` create/edit dialog)
-- Replace the current email field with a chip-style input:
-  - Type an email + Enter / comma / blur → adds a chip
-  - Zod-validated; invalid entries shake + show inline error, never silently dropped
-  - Backspace removes the last chip; click × on a chip to remove
-  - Paste a comma/space/newline-separated list → splits into chips
-- Recent-contact suggestions dropdown:
-  - As you type, query distinct attendee emails from your own past `meetings` rows (already in your DB) — fast, no extra API call
-  - Optional fallback to Gmail "Sent" lookup (the existing `lookupRecipient` server fn in `src/lib/email.functions.ts`) when nothing matches locally
-  - Arrow keys + Enter to pick
+### 1. `supabase/functions/telegram-webhook/index.ts` — one-shot email flow
+- Extend `SYSTEM_PROMPT.email_intents` to also carry `recipient_email` (if an @ address was dictated) and `content` (the full ask), not just `recipient_query`.
+- Detect typed triggers alongside Claude: a regex for `draft (an )?email|email draft|compose (an )?email|write (an )?email` short-circuits into the drafting path even when Claude's parse is weak.
+- Replace the current two-step `awaiting_recipient` → `awaiting_content` flow (via `pending_email_intents`) with a single step:
+  1. Resolve recipient: explicit email in the message → top Gmail Sent-folder match → none.
+  2. `composeEmail(fullTranscript)` → `{ subject, body }`.
+  3. Call `createGmailDraft` (existing helper). If no recipient, build the RFC 2822 message **without a `To:` header** so Gmail stores it as a draft with no recipient.
+  4. Insert into `drafts_log` (owner_id, gmail_draft_id, recipient nullable, subject, body_preview).
+  5. Always `sendTelegram(...)` a confirmation:
+     - With recipient: "✅ Draft ready for Name <email>. Subject: X — open the Email page or Gmail Drafts to review."
+     - Without recipient: "✅ Draft written but I couldn't find an email address. Open the Email page to add the recipient and save."
+- Wrap the compose+draft in try/catch that always emits a Telegram failure message so the user is never left in silence.
+- Keep the old `pending_email_intents` code paths as no-op fallbacks (don't insert new pending rows going forward).
 
-### 2. RSVP status on the meeting card
-- New server fn `getEventRsvps({ eventId })` in `src/lib/meetings.functions.ts`:
-  - GETs `/calendars/primary/events/{eventId}` via the existing connector gateway
-  - Returns `[{ email, displayName, responseStatus }]` from the event's `attendees`
-- New column `google_event_id` on `meetings` (nullable text) so we know which Google event to ask about. The existing `createCalendarEvent` already returns `eventId` — wire that into the insert.
-- On each upcoming meeting card, show small status badges per attendee:
-  - ✓ accepted (green), ✗ declined (red), ? tentative (amber), … needsAction (muted)
-- Fetched via `useQuery` per meeting (enabled only when `google_event_id` exists), cached 60s, refetch on window focus and via a manual refresh button.
+### 2. `src/routes/email.tsx` — surface "needs recipient" drafts
+- In the "Completed drafts" sidebar, show an amber "Needs recipient" badge on any item whose `recipient` is null.
+- Clicking such a draft loads it into compose (already works) with the `To` field empty and focused, and shows an inline amber hint under the To field: "Add a recipient before saving to Gmail Drafts."
+- Add a light 15s refetch on the drafts list so Telegram-created drafts appear without manual reload.
+- Small copy tweak on the mic/polish flow: after "Polish into email" toast, add hint text under Body: "Ready to review — edit and Save to Gmail Drafts."
 
-### 3. Tiny safety polish
-- Disable the "Create" button while `createEvent` is pending so double-clicks can't create duplicate calendar events.
-- Toast on success: "Invite sent to N attendee(s)".
-
-## Technical notes
-- DB: one migration to add `meetings.google_event_id text` (nullable, no backfill needed) plus standard GRANTs already in place.
-- No new secrets, no new connector — uses the already-linked Google Calendar connector and existing Gmail connector for the optional sent-folder lookup.
-- No changes to the calendar create path itself beyond storing the returned `eventId`; invites already go out because `sendUpdates=all` is set.
-
-## Out of scope (say the word and I'll add)
-- Reminders / Google Meet link on the invite
-- Per-user OAuth (each app user signing in with their own Google account)
-- Editing attendee list after creation re-sending invites
+## Out of scope
+- No DB schema changes (`drafts_log.recipient` is already nullable).
+- No Gmail attachments from Telegram, no editing the Gmail draft in place after Telegram creates it (Email page save creates a fresh draft, unchanged).
+- Multi-candidate recipient picker on Telegram (one-shot uses only the top match).
