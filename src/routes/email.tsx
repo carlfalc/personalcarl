@@ -162,12 +162,18 @@ function EmailPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const toRef = useRef<HTMLInputElement | null>(null);
   const loadDraft = (d: { recipient: string | null; subject: string | null; body_preview: string | null }) => {
     setTo(d.recipient ?? "");
     setSubject(d.subject ?? "");
     setBody(d.body_preview ?? "");
     setTranscript("");
-    toast.info("Loaded into compose — edit and re-save");
+    if (!d.recipient) {
+      toast.info("Draft loaded — add a recipient before saving to Gmail Drafts");
+      window.setTimeout(() => toRef.current?.focus(), 50);
+    } else {
+      toast.info("Loaded into compose — edit and re-save");
+    }
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
