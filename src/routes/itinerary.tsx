@@ -73,7 +73,7 @@ function ItineraryPage() {
 
   const { data: itineraries = [] } = useQuery({
     queryKey: ["itineraries"],
-    enabled: !!user,
+    enabled: !!userId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("itineraries" as never)
@@ -86,10 +86,10 @@ function ItineraryPage() {
 
   const createItinerary = useMutation({
     mutationFn: async () => {
-      if (!user) throw new Error("Not signed in");
+      if (!userId) throw new Error("Not signed in");
       const { data, error } = await supabase
         .from("itineraries" as never)
-        .insert({ user_id: user.id, name: "New trip", travel_modes: [] } as never)
+        .insert({ user_id: userId, name: "New trip", travel_modes: [] } as never)
         .select()
         .single();
       if (error) throw error;
@@ -104,7 +104,7 @@ function ItineraryPage() {
       <PageHeader
         title="Itinerary"
         subtitle="Plan trips, legs, accommodation, and get local recommendations"
-        rightAction={
+        action={
           <Button onClick={() => createItinerary.mutate()}>
             <Plus className="h-4 w-4 mr-2" /> New itinerary
           </Button>
