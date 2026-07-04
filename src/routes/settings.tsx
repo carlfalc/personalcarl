@@ -51,6 +51,62 @@ const OTHER_MEMORY_CATEGORIES: { key: Category; label: string }[] = [
   { key: "travel", label: "Travel" },
 ];
 
+/**
+ * Diary summary runs on the server at 21:30 Pacific/Auckland. Show the
+ * equivalent wall-clock time in the user's country so the sentence reads
+ * correctly for wherever they are.
+ */
+function diarySummarySentence(
+  countryIso: string,
+  countries: Array<{ isoCode: string; name: string; timezones?: Array<{ zoneName: string }> }>,
+): string {
+  const country = countries.find((c) => c.isoCode === countryIso);
+  const tz = country?.timezones?.[0]?.zoneName;
+  const countryName = country?.name;
+
+  // Build "today 21:30 in Auckland" as a real instant, then format in target tz.
+  try {
+    const nowUtc = new Date();
+    const aklParts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Pacific/Auckland",
+      year: "numeric", month: "2-digit", day: "2-digit",
+    }).formatToParts(nowUtc);
+    const y = aklParts.find((p) => p.type === "year")!.value;
+    const m = aklParts.find((p) => p.type === "month")!.value;
+    const d = aklParts.find((p) => p.type === "day")!.value;
+    // 21:30 Auckland → find matching UTC by trial: use the offset from formatToParts.
+    // Simpler: build via a formatted string parser using the timezone offset.
+    const aklOffsetMin = tzOffsetMinutes("Pacific/Auckland", new Date(`${y}-${m}-${d}T12:00:00Z`));
+    const utcTs = Date.UTC(Number(y), Number(m) - 1, Number(d), 21, 30) - aklOffsetMin * 60_000;
+    const instant = new Date(utcTs);
+
+    if (!tz || !countryName) {
+      return "Each night at 21:30 NZ, merges today's diary entries into one tidy paragraph (if 2+ entries).";
+    }
+    const localTime = new Intl.DateTimeFormat("en-GB", {
+      timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false,
+    }).format(instant);
+    return `Each night at ${localTime} ${countryName} time, merges today's diary entries into one tidy paragraph (if 2+ entries).`;
+  } catch {
+    return "Each night at 21:30 NZ, merges today's diary entries into one tidy paragraph (if 2+ entries).";
+  }
+}
+
+/** Get a timezone's offset in minutes east of UTC at a given instant. */
+function tzOffsetMinutes(tz: string, at: Date): number {
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz, hour12: false,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  });
+  const parts = Object.fromEntries(dtf.formatToParts(at).map((p) => [p.type, p.value]));
+  const asUtc = Date.UTC(
+    Number(parts.year), Number(parts.month) - 1, Number(parts.day),
+    Number(parts.hour), Number(parts.minute), Number(parts.second),
+  );
+  return Math.round((asUtc - at.getTime()) / 60_000);
+}
+
 function SettingsPage() {
   const { userId } = useAuthSession();
   const qc = useQueryClient();
