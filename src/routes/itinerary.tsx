@@ -574,7 +574,7 @@ function TransportFields({
 }
 
 function AccommodationFields({
-  local, setLocal, setDetail, commit, country, city, legId,
+  local, setLocal, setDetail, commit, country, city, legId, itineraryId,
 }: {
   local: { from_label: string; to_label: string; depart_at: string; arrive_at: string; details: Record<string, string> };
   setLocal: (v: typeof local) => void;
@@ -583,6 +583,7 @@ function AccommodationFields({
   country?: string;
   city: string;
   legId: string;
+  itineraryId: string;
 }) {
   const address = local.details.address ?? "";
   const name = local.details.name ?? "";
@@ -634,6 +635,7 @@ function AccommodationFields({
 
       <NearbySection
         legId={legId}
+        itineraryId={itineraryId}
         accommodation={[name, address].filter(Boolean).join(", ")}
         city={city}
         country={country}
