@@ -6,8 +6,12 @@ import { toast } from "sonner";
 import {
   Stethoscope, Pencil, Plus, Trash2, Upload, Sparkles, Save,
   Download, ChevronDown, ChevronRight, ArrowUp, ArrowDown, Check, X,
-  FileText, Image as ImageIcon, CircleCheck,
+  FileText, Image as ImageIcon, CircleCheck, GitCompare, TrendingUp,
 } from "lucide-react";
+import {
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceArea, CartesianGrid,
+} from "recharts";
+import { Checkbox } from "@/components/ui/checkbox";
 import jsPDF from "jspdf";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthSession } from "@/hooks/useAuthSession";
