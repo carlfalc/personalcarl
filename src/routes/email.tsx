@@ -32,7 +32,7 @@ function EmailPage() {
   const lookup = useServerFn(lookupRecipient);
   const getAtts = useServerFn(getImagesForAttach);
 
-  const draftsQ = useQuery({ queryKey: ["recent-drafts"], queryFn: () => listDrafts() });
+  const draftsQ = useQuery({ queryKey: ["recent-drafts"], queryFn: () => listDrafts(), refetchInterval: 15000, refetchOnWindowFocus: true });
 
   const [recording, setRecording] = useState(false);
   const [transcript, setTranscript] = useState("");
