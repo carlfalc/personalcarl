@@ -510,7 +510,7 @@ function SettingsPage() {
               <div className="flex items-center justify-between">
                 <p className="text-xs text-muted-foreground">Reminds you of tasks still open or overdue today.</p>
                 <input type="checkbox" className="h-5 w-5 accent-primary" checked={nudgeEnabled}
-                  onChange={(e) => setNudgeEnabled(e.target.checked)} />
+                  onChange={(e) => { setNudgeEnabled(e.target.checked); saveNudge.mutate({ enabled: e.target.checked, time: nudgeTime }); }} />
               </div>
               <div className="flex items-end gap-2">
                 <div className="flex-1">
