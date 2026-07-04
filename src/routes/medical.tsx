@@ -975,6 +975,9 @@ function ComparePanel({ older, newer }: {
             {fmt(older.when)} → {fmt(newer.when)} · {issues.length} marker{issues.length === 1 ? "" : "s"} needing attention
           </p>
         </div>
+        <Button size="sm" variant="outline" onClick={() => downloadComparePdf(older, newer, rows)}>
+          <Download className="h-4 w-4 mr-1" /> Download PDF
+        </Button>
       </div>
       <div className="overflow-x-auto rounded-lg border border-border bg-background">
         <table className="w-full text-sm">
