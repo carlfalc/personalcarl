@@ -182,6 +182,133 @@ export type Database = {
         }
         Relationships: []
       }
+      itineraries: {
+        Row: {
+          city: string | null
+          country: string | null
+          created_at: string
+          end_date: string | null
+          id: string
+          name: string
+          start_date: string | null
+          travel_modes: string[]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          end_date?: string | null
+          id?: string
+          name: string
+          start_date?: string | null
+          travel_modes?: string[]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          end_date?: string | null
+          id?: string
+          name?: string
+          start_date?: string | null
+          travel_modes?: string[]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      itinerary_legs: {
+        Row: {
+          arrive_at: string | null
+          created_at: string
+          depart_at: string | null
+          details: Json
+          from_label: string | null
+          id: string
+          itinerary_id: string
+          position: number
+          to_label: string | null
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          arrive_at?: string | null
+          created_at?: string
+          depart_at?: string | null
+          details?: Json
+          from_label?: string | null
+          id?: string
+          itinerary_id: string
+          position?: number
+          to_label?: string | null
+          type: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          arrive_at?: string | null
+          created_at?: string
+          depart_at?: string | null
+          details?: Json
+          from_label?: string | null
+          id?: string
+          itinerary_id?: string
+          position?: number
+          to_label?: string | null
+          type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "itinerary_legs_itinerary_id_fkey"
+            columns: ["itinerary_id"]
+            isOneToOne: false
+            referencedRelation: "itineraries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      itinerary_nearby_searches: {
+        Row: {
+          created_at: string
+          id: string
+          leg_id: string
+          query: string
+          results: Json
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          leg_id: string
+          query: string
+          results?: Json
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          leg_id?: string
+          query?: string
+          results?: Json
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "itinerary_nearby_searches_leg_id_fkey"
+            columns: ["leg_id"]
+            isOneToOne: false
+            referencedRelation: "itinerary_legs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       market_quotes_cache: {
         Row: {
           change_pct: number | null

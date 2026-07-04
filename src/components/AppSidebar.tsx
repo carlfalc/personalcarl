@@ -15,6 +15,7 @@ import {
   Users,
   Settings as SettingsIcon,
   Calculator as CalculatorIcon,
+  Plane,
   GripVertical,
   type LucideIcon,
 } from "lucide-react";
@@ -63,6 +64,7 @@ const items: Array<Item> = [
   { id: "schedules", title: "Schedules", subtitle: "Recurring AI briefings",     url: "/schedules", icon: Clock },
   { id: "roster",    title: "Roster",    subtitle: "Glasshouse weekly roster",   url: "/roster",    icon: Users },
   { id: "training",  title: "Training Roster", subtitle: "Weekly training schedule", url: "/training-roster", icon: Users },
+  { id: "itinerary", title: "Itinerary", subtitle: "Trips, legs & nearby",   url: "/itinerary", icon: Plane },
   { id: "settings",  title: "Settings / About Me", subtitle: "Profile, contacts & briefings", url: "/settings", icon: SettingsIcon },
   { id: "calculator", title: "Calculator", subtitle: "Tools & calculators",       url: "/calculator", icon: CalculatorIcon },
 ];

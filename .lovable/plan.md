@@ -1,57 +1,64 @@
-# Merge Settings & About Me → single "Settings / About Me" page
+# Itinerary Page Plan
 
-## Route & navigation
-- Create new route `src/routes/settings.tsx` (replacing current) at `/settings`, titled **"Settings / About Me"**.
-- Delete `src/routes/about.tsx`; add a redirect from `/about` → `/settings` so old links still work.
-- Sidebar: remove the separate "About Me" entry; keep a single "Settings / About Me" item (using the existing Settings icon).
+A new `/itinerary` route where you build travel itineraries with legs (flights, trains, buses, vehicles), accommodations, and get AI-powered "what's nearby" recommendations with maps.
 
-## Page layout (top → bottom)
+## Page structure
 
-**1. Profile card** (always open at top)
-- Avatar upload (existing behaviour, kept as-is).
-- Editable **Name** (inline pencil, saved to `profiles.display_name`).
-- **Date of birth** (date input, saved to `profiles.date_of_birth`).
-- **Country** dropdown (searchable, all 195 countries from a bundled list).
-- **City** dropdown that populates based on selected country.
-  - Approach: use the `country-state-city` npm package (~2MB, bundled) so we get all countries + cities offline with no API key. Cities load only for the picked country, so runtime cost is small.
-- Optional contact fields: email (read-only from auth), phone.
-- Save button persists all profile fields at once.
+**1. Itinerary header**
+- Itinerary name (text)
+- Destination country + city (same dropdowns as Settings, using `country-state-city`)
+- Travel dates (start / end date pickers)
+- Travel modes: checkboxes for Vehicle, Train, Plane, Bus (select one or more — controls which leg types the "Add leg" menu offers)
 
-**2. Important people** (collapsible, open by default)
-- Contact list of family / close friends: name, relationship, birthday, phone, email.
-- Reuses the existing `memory` table entries where `category = 'family'` (already stores name, relationship, contact_email, contact_phone, birth_date).
-- Add / edit / delete rows inline; keeps the existing FamilyDialog behaviour, just inline on the page instead of a separate About tab.
-- The other About-Me categories (interests, projects, preferences, business, technology, travel) move into a secondary collapsible "About me notes" section further down — kept, not lost.
+**2. Legs (ordered list, add/remove/reorder)**
+Each leg has a type + shared fields (from/to, depart time, arrive time, notes) plus type-specific fields:
+- **Flight**: airline, flight number, departure airport (IATA), arrival airport, depart/arrive datetime. Toggle: "Show airport info (lounges, parking, transit)" → calls AI to summarize both airports.
+- **Train**: operator, train number, from/to station, depart/arrive. Toggle: "Show station info".
+- **Bus**: operator, route/number, from/to stop, depart/arrive. Toggle: "Show station info".
+- **Vehicle**: from/to, depart time, driver/vehicle notes.
+- **Accommodation** (also a leg-type entry so it slots into the timeline): name, address, check-in / check-out, notes. Shows a Google Map for the address and unlocks the nearby-search box.
 
-**3. Birthdays** (collapsible, above cron settings)
-- Existing birthdays table UI moved here, wrapped in an accordion so it can be opened/closed.
-- Add / edit / delete birthdays unchanged.
+**3. Nearby places (per accommodation)**
+- Prompt: "What do you need near {accommodation name}? Restaurants, bars, shopping, events, anything else…"
+- Text input + microphone button (Web Speech API `SpeechRecognition`) + date range (auto-filled from stay dates).
+- Submit → server function calls Lovable AI (`google/gemini-3-flash-preview`) with tool-calling to Google Places (New) `searchText`/`searchNearby` via the existing Google Maps connector gateway, biased to the accommodation coordinates.
+- Results render as cards: name, category, rating, distance from accommodation, address, "Open in map" link. All results also plotted as pins on a shared map next to the accommodation, with the accommodation as the anchor pin.
 
-**4. Telegram** (collapsible)
-- Chat ID + save button, unchanged.
+## Data model
 
-**5. Scheduled briefings** (each in its own collapsible sub-section within Telegram or as siblings — I'll keep them as siblings for clarity):
-- Morning briefing, Evening nudge, Weekly review, Grocery send, Daily diary summary — each is its own collapsible card, all closed by default except any that are enabled.
+New tables (RLS, `auth.uid()`-scoped, standard GRANTs, `updated_at` trigger):
 
-## Database
-One migration adds two nullable columns to `profiles`:
-- `date_of_birth date`
-- `country text`
-- `city text`
-- `phone text`
+```text
+itineraries
+  id, user_id, name, country, city, start_date, end_date, travel_modes text[]
 
-No RLS changes (existing profile policies already cover the owner).
+itinerary_legs
+  id, itinerary_id, user_id, position int, type
+  ('flight'|'train'|'bus'|'vehicle'|'accommodation'),
+  from_label, to_label, depart_at, arrive_at,
+  details jsonb   -- flight_no, airline, address, coords, toggles, etc.
 
-## Technical details
-- Use `<Accordion>` from shadcn (`@/components/ui/accordion`) for all collapsible sections — single component, consistent look, open/close state remembered per session via `defaultValue`.
-- Country/city data: install `country-state-city` and lazy-load city list on country change.
-- Keep the existing avatar upload, birthday CRUD, and Telegram/cron save mutations as-is — just re-arranged in the new layout.
-- Update `AppSidebar.tsx`: remove the About entry, rename Settings item to "Settings / About Me".
-- Regenerate route tree implicitly via Vite plugin.
+itinerary_nearby_searches
+  id, leg_id, user_id, query, results jsonb, created_at
+```
 
-## Out of scope
-- No changes to how the assistant reads memory (still queries `memory` table).
-- No changes to birthday notifications or Telegram flows.
-- No changes to the auth email field editability.
+## AI + Maps
 
-After you approve, I'll implement in one pass and you can review.
+- **Nearby search** and **airport/station info**: TanStack server functions in `src/lib/itinerary.functions.ts` guarded by `requireSupabaseAuth`, using the Lovable AI gateway (`ai-sdk-lovable-gateway`) with a `places_search` tool that proxies through the existing Google Maps connector gateway (`places/v1/places:searchText`, `places/v1/places:searchNearby`).
+- **Maps** rendered client-side with the Maps JS API using `VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY` (already available via the connector). Accommodation pin + result pins, click-to-open in Google Maps.
+- **Microphone** uses the browser `webkitSpeechRecognition` / `SpeechRecognition` API — no server component. Falls back gracefully if unsupported.
+
+## Files
+
+- `supabase/migrations/<ts>_itinerary.sql` — 3 tables + GRANTs + RLS + trigger.
+- `src/routes/itinerary.tsx` — list of itineraries + create button.
+- `src/routes/itinerary.$id.tsx` — itinerary detail (header, legs, nearby).
+- `src/lib/itinerary.functions.ts` — `nearbySearch`, `placeInfo` server fns.
+- `src/components/itinerary/LegCard.tsx`, `AccommodationMap.tsx`, `NearbySearch.tsx`, `MicButton.tsx`.
+- `src/components/AppSidebar.tsx` — add "Itinerary" entry.
+
+## Notes
+
+- Country/city dropdown reuses the exact pattern from Settings.
+- Legs render in a single timeline sorted by `position` (drag handles for reorder — simple up/down buttons first pass).
+- Airport/station info panel is collapsed by default; expanding triggers the AI call once and caches into the leg's `details.info` jsonb.
