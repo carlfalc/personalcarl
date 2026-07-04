@@ -54,7 +54,7 @@ interface ParsedNote {
     relationship?: string | null;
     birth_date?: string | null;
   }>;
-  email_intents: Array<{ recipient_query: string }>;
+  email_intents: Array<{ recipient_query: string; recipient_email?: string | null; content?: string | null }>;
 }
 
 const EMPTY: ParsedNote = { entries: [], meetings: [], memory: [], email_intents: [] };
@@ -65,11 +65,12 @@ const SYSTEM_PROMPT = `You parse a personal-assistant voice note into structured
   entries: [{ type: 'task'|'idea'|'todo'|'diary', content: string, tags: string[], priority: 1|2|3, due_date: string|null }],
   meetings: [{ title: string, datetime: string, location: string|null, notes: string|null }],
   memory: [{ fact: string, category: 'interest'|'project'|'preference'|'family'|'business'|'technology'|'travel', confidence: number, contact_email: string|null, contact_phone: string|null, relationship: string|null, birth_date: string|null }],
-  email_intents: [{ recipient_query: string }]
+  email_intents: [{ recipient_query: string, recipient_email: string|null, content: string|null }]
 }
 
 Rules:
-- email_intents: include ONLY when the user clearly asks to email/send something to someone (e.g. "send email to kitchen", "email Sarah"). recipient_query is the name/word the user used to refer to the recipient. Do NOT invent a subject or body — those are gathered in a follow-up step.
+- email_intents: include when the user asks to draft/send/write/email something. recipient_query = the name/word they used for the recipient (e.g. "Kitchen", "Sarah") or "" if none given. recipient_email = a literal email address if they dictated one, else null. content = the actual message they want the email to say (everything after the recipient reference), or null if they didn't dictate content.
+- Trigger phrases include: "draft email", "email draft", "send email", "write an email", "compose email", "email to ...".
 - Never include email_intents for tasks, todos, meetings, ideas, diary notes, family/contact updates, birthdays, or generic "stop/cancel" messages.
 - Tasks/to-dos → entries. Ideas → entries with type "idea". Scheduled calendar appointments → meetings. Durable facts → memory. Reflective notes → diary entries.
 - Family/contact commands such as "add my sister Jane" or "add family name Jane" → memory with category "family". Put the person's name in fact if that is all you know, and fill contact_email, contact_phone, relationship, and birth_date only when provided.
