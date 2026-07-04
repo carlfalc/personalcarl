@@ -87,13 +87,11 @@ function useSidebarCounts() {
     queryKey: ["sidebar-counts"],
     queryFn: async (): Promise<Record<CountKey, number>> => {
       const nowIso = new Date().toISOString();
-      const [tasks, ideas, todos, meetings, images] = await Promise.all([
+      const [tasks, ideas, meetings, images] = await Promise.all([
         supabase.from("entries").select("id", { count: "exact", head: true })
           .eq("type", "task").not("status", "in", "(done,deleted)"),
         supabase.from("entries").select("id", { count: "exact", head: true })
           .eq("type", "idea").neq("status", "deleted"),
-        supabase.from("entries").select("id", { count: "exact", head: true })
-          .eq("type", "todo").neq("status", "done"),
         supabase.from("meetings").select("id", { count: "exact", head: true })
           .neq("status", "cancelled").gte("datetime", nowIso),
         supabase.from("images").select("id", { count: "exact", head: true }),
@@ -101,7 +99,6 @@ function useSidebarCounts() {
       return {
         tasks: tasks.count ?? 0,
         ideas: ideas.count ?? 0,
-        todos: todos.count ?? 0,
         meetings: meetings.count ?? 0,
         images: images.count ?? 0,
       };
