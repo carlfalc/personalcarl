@@ -540,14 +540,12 @@ function base64url(input: string): string {
     .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-async function createGmailDraft(args: { to: string; subject: string; body: string }): Promise<string> {
-  const rfc2822 = [
-    `To: ${args.to}`,
-    `Subject: ${args.subject}`,
-    'Content-Type: text/plain; charset="UTF-8"',
-    "",
-    args.body,
-  ].join("\r\n");
+async function createGmailDraft(args: { to: string | null; subject: string; body: string }): Promise<string> {
+  const headers: string[] = [];
+  if (args.to && args.to.trim()) headers.push(`To: ${args.to.trim()}`);
+  headers.push(`Subject: ${args.subject}`);
+  headers.push('Content-Type: text/plain; charset="UTF-8"');
+  const rfc2822 = [...headers, "", args.body].join("\r\n");
   const res = await fetch(`${GATEWAY}/google_mail/gmail/v1/users/me/drafts`, {
     method: "POST",
     headers: {
@@ -563,6 +561,68 @@ async function createGmailDraft(args: { to: string; subject: string; body: strin
   }
   const draft = await res.json();
   return draft.id ?? "";
+}
+
+// One-shot: resolve recipient (explicit email > top Gmail match > none),
+// compose subject/body, save Gmail draft, log to drafts_log, notify Telegram.
+async function runOneShotEmail(
+  supabase: ReturnType<typeof createClient>,
+  chatId: number,
+  transcript: string,
+  hint: { recipientQuery?: string | null; explicitEmail?: string | null; content?: string | null },
+): Promise<void> {
+  try {
+    const contentForCompose = (hint.content && hint.content.trim()) ? hint.content.trim() : transcript;
+
+    let recipientEmail: string | null = hint.explicitEmail?.trim() || null;
+    let recipientName: string | null = null;
+    if (!recipientEmail) {
+      const inline = transcript.match(EMAIL_RE);
+      if (inline) recipientEmail = inline[0];
+    }
+    if (!recipientEmail && hint.recipientQuery && hint.recipientQuery.trim()) {
+      const matches = await lookupRecipientsInGmail(hint.recipientQuery.trim());
+      if (matches[0]) {
+        recipientEmail = matches[0].email;
+        recipientName = matches[0].name || null;
+      }
+    }
+
+    const { subject, body } = await composeEmail(contentForCompose);
+    const draftId = await createGmailDraft({ to: recipientEmail, subject, body });
+
+    const { data: owner } = await supabase
+      .from("profiles")
+      .select("id")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (owner?.id) {
+      await supabase.from("drafts_log").insert({
+        user_id: owner.id,
+        gmail_draft_id: draftId,
+        recipient: recipientEmail,
+        subject,
+        body_preview: body.slice(0, 200),
+      });
+    }
+
+    if (recipientEmail) {
+      const who = recipientName ? `${recipientName} <${recipientEmail}>` : recipientEmail;
+      await sendTelegram(
+        chatId,
+        `✅ Draft ready for ${who}.\nSubject: ${subject}\n\nReview on the Email page or open Gmail Drafts: https://mail.google.com/mail/u/0/#drafts`,
+      );
+    } else {
+      await sendTelegram(
+        chatId,
+        `✅ Draft written but I couldn't find an email address.\nSubject: ${subject}\n\nOpen the Email page to add the recipient and save it to Gmail Drafts.`,
+      );
+    }
+  } catch (e) {
+    console.error("runOneShotEmail failed", e);
+    await sendTelegram(chatId, `⚠️ Couldn't draft that email: ${e instanceof Error ? e.message : "unknown"}`);
+  }
 }
 
 // ---------- Email flow ----------
