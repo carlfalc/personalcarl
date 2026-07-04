@@ -456,23 +456,55 @@ async function callClaudeDiarySummary(diaryJson: string): Promise<string> {
   return blocks.filter((b: any) => b?.type === "text").map((b: any) => b.text).join("\n\n").trim();
 }
 
-async function runDailySummary(owner: OwnerProfile, now: ReturnType<typeof nowInAuckland>): Promise<void> {
-  if (!owner.diary_summary_enabled) return;
-  const todayYmd = now.ymd;
-  const lastYmd = owner.last_diary_summary ? aklDateString(new Date(owner.last_diary_summary)) : null;
-  if (lastYmd === todayYmd) return;
-  // Due once per day at 21:30 NZ
-  if (!isAtOrPastTime("21:30", now)) return;
+function nowInTz(tz: string): { hour: number; minute: number; ymd: string } {
+  const fmt = new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  });
+  const parts = Object.fromEntries(fmt.formatToParts(new Date()).map((p) => [p.type, p.value]));
+  return {
+    hour: parseInt(parts.hour, 10),
+    minute: parseInt(parts.minute, 10),
+    ymd: `${parts.year}-${parts.month}-${parts.day}`,
+  };
+}
 
-  const dayStartUtc = new Date(`${todayYmd}T00:00:00+13:00`).toISOString();
-  const dayEndUtc = new Date(`${todayYmd}T23:59:59+13:00`).toISOString();
+function ymdInTz(iso: string, tz: string): string {
+  const fmt = new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+  });
+  const parts = Object.fromEntries(fmt.formatToParts(new Date(iso)).map((p) => [p.type, p.value]));
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+async function runDailySummary(owner: OwnerProfile, _now: ReturnType<typeof nowInAuckland>): Promise<void> {
+  if (!owner.diary_summary_enabled) return;
+  // Evaluate in the user's own timezone (from Settings country), falling back to Auckland.
+  const userTz = owner.timezone || TZ;
+  const local = nowInTz(userTz);
+  const todayYmd = local.ymd;
+  const lastYmd = owner.last_diary_summary ? ymdInTz(owner.last_diary_summary, userTz) : null;
+  if (lastYmd === todayYmd) return;
+  // Due once per day at 21:30 local
+  if (!isAtOrPastTime("21:30", { hour: local.hour, minute: local.minute })) return;
+
+  // Local day bounds → UTC ISO for filtering diary entries created "today" in user tz.
+  const startOffsetMin = tzOffsetMinutes(userTz, new Date(`${todayYmd}T12:00:00Z`));
+  const dayStartUtc = new Date(Date.UTC(
+    Number(todayYmd.slice(0, 4)), Number(todayYmd.slice(5, 7)) - 1, Number(todayYmd.slice(8, 10)),
+    0, 0, 0,
+  ) - startOffsetMin * 60_000).toISOString();
+  const dayEndUtc = new Date(Date.UTC(
+    Number(todayYmd.slice(0, 4)), Number(todayYmd.slice(5, 7)) - 1, Number(todayYmd.slice(8, 10)),
+    23, 59, 59,
+  ) - startOffsetMin * 60_000).toISOString();
 
   const r = await db(
     `entries?select=content,created_at,tags&user_id=eq.${owner.id}&type=eq.diary&created_at=gte.${dayStartUtc}&created_at=lte.${dayEndUtc}&order=created_at.asc`,
   );
   if (!r.ok) return;
   const rows = await r.json() as Array<{ content: string; created_at: string; tags: string[] | null }>;
-  // Exclude prior auto-summaries
   const real = rows.filter((e) => !(e.tags ?? []).includes("daily-summary"));
   if (real.length < 2) return;
 
@@ -497,6 +529,20 @@ async function runDailySummary(owner: OwnerProfile, now: ReturnType<typeof nowIn
     headers: { Prefer: "return=minimal" },
     body: JSON.stringify({ last_diary_summary: new Date().toISOString() }),
   });
+}
+
+function tzOffsetMinutes(tz: string, at: Date): number {
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz, hour12: false,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  });
+  const parts = Object.fromEntries(dtf.formatToParts(at).map((p) => [p.type, p.value]));
+  const asUtc = Date.UTC(
+    Number(parts.year), Number(parts.month) - 1, Number(parts.day),
+    Number(parts.hour), Number(parts.minute), Number(parts.second),
+  );
+  return Math.round((asUtc - at.getTime()) / 60_000);
 }
 
 async function runBirthdayCheck(chatId: string, now: ReturnType<typeof nowInAuckland>): Promise<void> {
