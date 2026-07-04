@@ -480,7 +480,7 @@ function SettingsPage() {
               <div className="flex items-center justify-between">
                 <p className="text-xs text-muted-foreground">Daily summary of meetings, tasks, birthdays & weather.</p>
                 <input type="checkbox" className="h-5 w-5 accent-primary" checked={briefingEnabled}
-                  onChange={(e) => setBriefingEnabled(e.target.checked)} />
+                  onChange={(e) => { setBriefingEnabled(e.target.checked); saveBriefing.mutate({ enabled: e.target.checked, time: briefingTime }); }} />
               </div>
               <div className="flex items-end gap-2">
                 <div className="flex-1">
