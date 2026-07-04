@@ -28,34 +28,56 @@ function extractJson(raw: string): unknown {
 // Nearby places around an accommodation address
 export const nearbyPlaces = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { accommodation: string; city?: string; country?: string; query: string }) =>
+  .inputValidator((input: { accommodation: string; city?: string; country?: string; query: string; category?: string }) =>
     z.object({
       accommodation: z.string().min(1).max(500),
       city: z.string().max(200).optional(),
       country: z.string().max(200).optional(),
       query: z.string().min(1).max(1000),
+      category: z.string().max(60).optional(),
     }).parse(input),
   )
   .handler(async ({ data }) => {
     const locationLine = [data.accommodation, data.city, data.country].filter(Boolean).join(", ");
+    const focus = data.category && data.category !== "all" ? `Focus on ${data.category}. ` : "";
     const body = await callGateway({
       model: "google/gemini-3-flash-preview",
       messages: [
         {
           role: "system",
           content:
-            "You are a local travel concierge. Given an accommodation address and a user request, suggest specific real places nearby. Return ONLY valid JSON with shape: {\"places\":[{\"name\":string,\"category\":string,\"address\":string,\"distance\":string,\"why\":string}]}. Include 5-10 places. Distances should be like '350 m' or '1.2 km' — rough walking distance from the accommodation. No commentary outside JSON.",
+            "You are a local travel concierge. Given an accommodation address and a user request, suggest specific real places nearby. Return ONLY valid JSON with shape: {\"places\":[{\"name\":string,\"category\":string,\"address\":string,\"distance\":string,\"distance_meters\":number,\"why\":string}]}. Category MUST be one of: restaurants, bars, shopping, events, coffee, other. Include 6-12 places, sorted closest first. `distance` is a human string like '350 m' or '1.2 km'; `distance_meters` is the same value expressed as an integer number of meters (rough walking distance from the accommodation). No commentary outside JSON.",
         },
         {
           role: "user",
-          content: `Accommodation: ${locationLine}\n\nRequest: ${data.query}`,
+          content: `Accommodation: ${locationLine}\n\n${focus}Request: ${data.query}`,
         },
       ],
     });
     const raw = body.choices?.[0]?.message?.content ?? "";
-    const parsed = extractJson(raw) as { places?: Array<{ name: string; category: string; address: string; distance: string; why: string }> } | null;
-    return { places: parsed?.places ?? [] };
+    const parsed = extractJson(raw) as {
+      places?: Array<{ name: string; category: string; address: string; distance: string; distance_meters?: number; why: string }>;
+    } | null;
+    const places = (parsed?.places ?? []).map((p) => ({
+      name: p.name,
+      category: (p.category || "other").toLowerCase(),
+      address: p.address,
+      distance: p.distance,
+      distance_meters: typeof p.distance_meters === "number" ? p.distance_meters : parseDistanceMeters(p.distance),
+      why: p.why,
+    }));
+    places.sort((a, b) => (a.distance_meters ?? 9e9) - (b.distance_meters ?? 9e9));
+    return { places };
   });
+
+function parseDistanceMeters(s: string | undefined): number | null {
+  if (!s) return null;
+  const m = s.match(/([\d.]+)\s*(km|m)\b/i);
+  if (!m) return null;
+  const n = parseFloat(m[1]);
+  if (Number.isNaN(n)) return null;
+  return m[2].toLowerCase() === "km" ? Math.round(n * 1000) : Math.round(n);
+}
 
 // Airport/station info summary
 export const stationInfo = createServerFn({ method: "POST" })
