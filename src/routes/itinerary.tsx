@@ -645,22 +645,116 @@ function AccommodationFields({
 }
 
 // -------------- Nearby AI search --------------
+type NearbyPlace = {
+  name: string;
+  category: string;
+  address: string;
+  distance: string;
+  distance_meters: number | null;
+  why: string;
+};
+
+type FavoritePlace = {
+  id: string;
+  leg_id: string;
+  name: string;
+  category: string | null;
+  address: string | null;
+  distance_label: string | null;
+  distance_meters: number | null;
+  why: string | null;
+  notes: string | null;
+};
+
+const CATEGORY_CHIPS: { key: string; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "restaurants", label: "🍽 Restaurants" },
+  { key: "bars", label: "🍸 Bars" },
+  { key: "shopping", label: "🛍 Shopping" },
+  { key: "events", label: "🎫 Events" },
+  { key: "coffee", label: "☕ Coffee" },
+];
+
+function mapLink(name: string, address: string) {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${name}, ${address}`)}`;
+}
+
 function NearbySection({
-  legId, accommodation, city, country,
-}: { legId: string; accommodation: string; city: string; country?: string }) {
+  legId, itineraryId, accommodation, city, country,
+}: { legId: string; itineraryId: string; accommodation: string; city: string; country?: string }) {
+  const qc = useQueryClient();
   const nearbyFn = useServerFn(nearbyPlaces);
   const [query, setQuery] = useState("");
-  const [places, setPlaces] = useState<Array<{ name: string; category: string; address: string; distance: string; why: string }>>([]);
+  const [category, setCategory] = useState<string>("all");
+  const [places, setPlaces] = useState<NearbyPlace[]>([]);
   const [loading, setLoading] = useState(false);
   const { listening, toggle, supported } = useMicDictation(setQuery);
+
+  // Saved favorites for this stay
+  const { data: favorites = [] } = useQuery({
+    queryKey: ["itinerary-favorites", legId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("itinerary_favorite_places" as never)
+        .select("*")
+        .eq("leg_id", legId)
+        .order("distance_meters", { ascending: true, nullsFirst: false });
+      if (error) throw error;
+      return (data ?? []) as unknown as FavoritePlace[];
+    },
+  });
+
+  const saveFavorite = useMutation({
+    mutationFn: async (p: NearbyPlace) => {
+      const { data: userData } = await supabase.auth.getUser();
+      const uid = userData.user?.id;
+      if (!uid) throw new Error("Not signed in");
+      const { error } = await supabase.from("itinerary_favorite_places" as never).insert({
+        user_id: uid,
+        leg_id: legId,
+        itinerary_id: itineraryId,
+        name: p.name,
+        category: p.category,
+        address: p.address,
+        distance_label: p.distance,
+        distance_meters: p.distance_meters,
+        why: p.why,
+        notes: null,
+      } as never);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["itinerary-favorites", legId] });
+      toast.success("Saved to favorites");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const updateFavorite = useMutation({
+    mutationFn: async (v: { id: string; notes: string }) => {
+      const { error } = await supabase.from("itinerary_favorite_places" as never)
+        .update({ notes: v.notes || null } as never).eq("id", v.id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["itinerary-favorites", legId] }),
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const deleteFavorite = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("itinerary_favorite_places" as never).delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["itinerary-favorites", legId] }),
+  });
 
   const search = async () => {
     if (!accommodation) { toast.error("Enter place name or address first"); return; }
     if (!query.trim()) return;
     setLoading(true);
     try {
-      const r = await nearbyFn({ data: { accommodation, city, country, query } });
-      setPlaces(r.places);
+      const r = await nearbyFn({ data: { accommodation, city, country, query, category } });
+      setPlaces(r.places as NearbyPlace[]);
       if (r.places.length === 0) toast.info("No results — try rephrasing");
     } catch (e) {
       toast.error((e as Error).message);
@@ -668,6 +762,13 @@ function NearbySection({
       setLoading(false);
     }
   };
+
+  const savedKey = (p: { name: string; address: string }) => `${p.name}|${p.address}`.toLowerCase();
+  const savedSet = new Set(favorites.map((f) => savedKey({ name: f.name, address: f.address ?? "" })));
+
+  const visiblePlaces = (category === "all" ? places : places.filter((p) => p.category === category))
+    .slice()
+    .sort((a, b) => (a.distance_meters ?? 9e9) - (b.distance_meters ?? 9e9));
 
   return (
     <div className="border-t pt-3 space-y-3">
@@ -677,14 +778,30 @@ function NearbySection({
           What do you need near {accommodation ? `"${accommodation.slice(0, 40)}${accommodation.length > 40 ? "…" : ""}"` : "your stay"}?
         </Label>
         <p className="text-xs text-muted-foreground mt-1">
-          Restaurants, bars, shopping, events, coffee — just ask. Tap the mic to dictate.
+          Pick a category or ask freely. Results are sorted by walking distance. Tap the mic to dictate.
         </p>
       </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {CATEGORY_CHIPS.map((c) => (
+          <button
+            key={c.key}
+            type="button"
+            onClick={() => setCategory(c.key)}
+            className={`px-3 py-1 rounded-full border text-xs transition ${
+              category === c.key ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-muted"
+            }`}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
+
       <div className="flex gap-2">
         <Textarea
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="e.g. Cozy sushi places under $50 within walking distance"
+          placeholder="e.g. Cozy sushi under $50 within walking distance"
           rows={2}
           className="flex-1"
         />
@@ -706,20 +823,31 @@ function NearbySection({
         </div>
       </div>
 
-      {places.length > 0 && (
+      {visiblePlaces.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          {places.map((p, i) => {
-            const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${p.name}, ${p.address}`)}`;
+          {visiblePlaces.map((p, i) => {
+            const isSaved = savedSet.has(savedKey(p));
             return (
-              <Card key={i} className="p-3 space-y-1">
+              <Card key={`${p.name}-${i}`} className="p-3 space-y-1">
                 <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="font-medium text-sm">{p.name}</div>
-                    <div className="text-xs text-muted-foreground">{p.category} · {p.distance}</div>
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm truncate">{p.name}</div>
+                    <div className="text-xs text-muted-foreground capitalize">{p.category} · {p.distance}</div>
                   </div>
-                  <a href={mapUrl} target="_blank" rel="noreferrer" className="text-primary text-xs hover:underline shrink-0">
-                    <MapPin className="inline h-3 w-3" /> Map
-                  </a>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <a href={mapLink(p.name, p.address)} target="_blank" rel="noreferrer" className="text-primary text-xs hover:underline" title="Open in Google Maps">
+                      <MapPin className="inline h-3.5 w-3.5" />
+                    </a>
+                    <button
+                      type="button"
+                      className="text-primary text-xs hover:underline disabled:opacity-50"
+                      onClick={() => !isSaved && saveFavorite.mutate(p)}
+                      disabled={isSaved || saveFavorite.isPending}
+                      title={isSaved ? "Already saved" : "Save as favorite"}
+                    >
+                      {isSaved ? <Star className="inline h-3.5 w-3.5 fill-current" /> : <StarOff className="inline h-3.5 w-3.5" />}
+                    </button>
+                  </div>
                 </div>
                 <div className="text-xs">{p.address}</div>
                 <div className="text-xs italic text-muted-foreground">{p.why}</div>
@@ -728,7 +856,82 @@ function NearbySection({
           })}
         </div>
       )}
+
+      {favorites.length > 0 && (
+        <div className="pt-3 border-t space-y-2">
+          <div className="text-sm font-semibold flex items-center gap-2">
+            <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" /> Saved favorites ({favorites.length})
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {favorites.map((f) => (
+              <FavoriteCard
+                key={f.id}
+                fav={f}
+                onSaveNotes={(notes) => updateFavorite.mutate({ id: f.id, notes })}
+                onDelete={() => deleteFavorite.mutate(f.id)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function FavoriteCard({
+  fav, onSaveNotes, onDelete,
+}: { fav: FavoritePlace; onSaveNotes: (notes: string) => void; onDelete: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [notes, setNotes] = useState(fav.notes ?? "");
+  useEffect(() => setNotes(fav.notes ?? ""), [fav.id, fav.notes]);
+
+  return (
+    <Card className="p-3 space-y-1 bg-muted/30">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="font-medium text-sm truncate">{fav.name}</div>
+          <div className="text-xs text-muted-foreground capitalize">
+            {fav.category ?? "other"}{fav.distance_label ? ` · ${fav.distance_label}` : ""}
+          </div>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <a
+            href={mapLink(fav.name, fav.address ?? "")}
+            target="_blank"
+            rel="noreferrer"
+            className="text-primary text-xs hover:underline"
+            title="Open in Google Maps"
+          >
+            <MapPin className="inline h-3.5 w-3.5" />
+          </a>
+          <button type="button" onClick={() => setEditing(!editing)} title="Edit notes" className="text-muted-foreground hover:text-primary">
+            <Pencil className="inline h-3.5 w-3.5" />
+          </button>
+          <button type="button" onClick={onDelete} title="Remove favorite" className="text-muted-foreground hover:text-destructive">
+            <Trash2 className="inline h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+      {fav.address && <div className="text-xs">{fav.address}</div>}
+      {fav.why && !editing && <div className="text-xs italic text-muted-foreground">{fav.why}</div>}
+      {editing ? (
+        <div className="space-y-1">
+          <Textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
+            placeholder="Your notes (booked table? must-try dish? closes early?)"
+            className="text-xs"
+          />
+          <div className="flex justify-end gap-1">
+            <Button size="sm" variant="ghost" onClick={() => { setEditing(false); setNotes(fav.notes ?? ""); }}>Cancel</Button>
+            <Button size="sm" onClick={() => { onSaveNotes(notes); setEditing(false); }}>Save note</Button>
+          </div>
+        </div>
+      ) : (
+        fav.notes && <div className="text-xs whitespace-pre-wrap">📝 {fav.notes}</div>
+      )}
+    </Card>
   );
 }
 
