@@ -552,32 +552,95 @@ function BloodTestsCard() {
         />
       )}
 
+      {history.length > 0 && <TrendCharts history={history} />}
+
       {history.length > 0 && (
-        <div className="pt-4">
-          <h3 className="text-sm font-semibold mb-3">Timeline</h3>
-          <ol className="relative border-l-2 border-border pl-6 space-y-4">
-            {history.map((h) => {
-              const r = h.ai_report as unknown as BloodReport;
-              const abnormal = r?.results?.filter((x) => x.status === "abnormal").length ?? 0;
-              return (
-                <TimelineItem
-                  key={h.id}
-                  title={h.title ?? "Blood test"}
-                  when={new Date(h.reported_at)}
-                  abnormalCount={abnormal}
-                  totalCount={r?.results?.length ?? 0}
-                  report={r}
-                  onDelete={async () => {
-                    await removeReport({ data: { id: h.id } });
-                    qc.invalidateQueries({ queryKey: ["medical-blood-reports"] });
-                  }}
-                />
-              );
-            })}
-          </ol>
-        </div>
+        <TimelineSection
+          history={history}
+          onDelete={async (id: string) => {
+            await removeReport({ data: { id } });
+            qc.invalidateQueries({ queryKey: ["medical-blood-reports"] });
+          }}
+        />
       )}
     </Card>
+  );
+}
+
+/* ============================================================
+   Timeline + Compare
+   ============================================================ */
+
+function TimelineSection({ history, onDelete }: {
+  history: Array<{ id: string; title: string | null; reported_at: string; ai_report: unknown }>;
+  onDelete: (id: string) => void;
+}) {
+  const [compareMode, setCompareMode] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+
+  const toggle = (id: string) => {
+    setSelected((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= 2) return [prev[1], id];
+      return [...prev, id];
+    });
+  };
+
+  const twoReports = selected.length === 2
+    ? selected
+        .map((id) => history.find((h) => h.id === id))
+        .filter((h): h is NonNullable<typeof h> => !!h)
+        .sort((a, b) => new Date(a.reported_at).getTime() - new Date(b.reported_at).getTime())
+    : [];
+
+  return (
+    <div className="pt-4 space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold">Timeline</h3>
+        <Button
+          variant={compareMode ? "default" : "outline"}
+          size="sm"
+          onClick={() => { setCompareMode((v) => !v); setSelected([]); }}
+        >
+          <GitCompare className="h-4 w-4 mr-1" />
+          {compareMode ? "Exit compare" : "Compare reports"}
+        </Button>
+      </div>
+
+      {compareMode && (
+        <p className="text-xs text-muted-foreground">
+          Select two reports to compare. {selected.length}/2 selected.
+        </p>
+      )}
+
+      {twoReports.length === 2 && (
+        <ComparePanel
+          older={{ when: new Date(twoReports[0].reported_at), report: twoReports[0].ai_report as BloodReport }}
+          newer={{ when: new Date(twoReports[1].reported_at), report: twoReports[1].ai_report as BloodReport }}
+        />
+      )}
+
+      <ol className="relative border-l-2 border-border pl-6 space-y-4">
+        {history.map((h) => {
+          const r = h.ai_report as unknown as BloodReport;
+          const abnormal = r?.results?.filter((x) => x.status === "abnormal").length ?? 0;
+          return (
+            <TimelineItem
+              key={h.id}
+              title={h.title ?? "Blood test"}
+              when={new Date(h.reported_at)}
+              abnormalCount={abnormal}
+              totalCount={r?.results?.length ?? 0}
+              report={r}
+              selectable={compareMode}
+              selected={selected.includes(h.id)}
+              onToggleSelect={() => toggle(h.id)}
+              onDelete={() => onDelete(h.id)}
+            />
+          );
+        })}
+      </ol>
+    </div>
   );
 }
 
