@@ -625,7 +625,7 @@ function SettingsPage() {
             <AccordionContent className="pb-5">
               <div className="flex items-center justify-between">
                 <p className="text-xs text-muted-foreground">
-                  Each night at 21:30 NZ, merges today's diary entries into one tidy paragraph (if 2+ entries).
+                  {diarySummarySentence(country, countries)}
                 </p>
                 <input type="checkbox" className="h-5 w-5 accent-primary" checked={diarySummaryEnabled}
                   onChange={(e) => { setDiarySummaryEnabled(e.target.checked); saveDiarySummary.mutate(e.target.checked); }} />
