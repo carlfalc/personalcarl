@@ -425,7 +425,8 @@ function PrescriptionsCard() {
 function BloodTestsCard() {
   const qc = useQueryClient();
   const session = useAuthSession();
-  const userId = session?.user?.id ?? null;
+  const userId = session?.userId ?? null;
+
   const analyze = useServerFn(analyzeBloodResults);
   const fetchReports = useServerFn(listBloodReports);
   const saveReport = useServerFn(saveBloodReport);
