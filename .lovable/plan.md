@@ -1,91 +1,63 @@
-# Daily Briefing AI — copy-paste bundle (no Telegram)
+# Messenger — Carl ↔ mymanager.co.nz
 
-Package everything needed to reproduce the "who's in today / wins & losses / weather / markets / horoscope" briefing in a new project. Delivered as files under `/mnt/documents/daily-briefing-source/` plus a single master prompt you can paste into any LLM.
+A Facebook-Messenger-style inbox shared between this project (Carl) and your other Lovable project (mymanager.co.nz). Both apps read/write the same threads, so anything you send from Carl pops up in his inbox in real time — with text, image and file attachments, read receipts, delete, and full history.
 
-## What goes in the bundle
+## How the two projects share one inbox
 
-### 1. Server function — the brain
-`lib/day-briefing.functions.ts` (existing file, unchanged)
-- Pulls today's roster (`roster_staff` where `day = weekday`)
-- Pulls today's training shifts (`roster_training`)
-- Pulls today's tasks (`entries` type=task, due today or high-priority)
-- Pulls today's meetings (`meetings` where datetime in day range)
-- Fetches LIVE market quotes from Yahoo Finance + caches in `market_quotes_cache`
-- Calls Lovable AI Gateway (`google/gemini-3-flash-preview`) with a structured JSON prompt for weather + horoscope + AI summary
-- Returns one `DayBriefing` object
+Both apps talk to the **same Lovable Cloud backend** (this project's). The other project keeps its own UI and users, but points its Supabase client at Carl's Cloud URL + publishable key. That's what makes the inbox shared — no webhooks, no polling, no second database to sync.
 
-### 2. New "wins & losses" extension
-Add a second server fn `lib/wins-losses.functions.ts` that aggregates the last 24h across the platform:
-- Tasks completed today (`entries` status=done, updated today) → wins
-- Tasks overdue / still open past due_date → losses
-- Meetings held vs cancelled
-- Emails drafted (`drafts_log` count today)
-- Memory facts added today
-- New ideas / diary entries today
-Feeds a compact JSON blob into an AI call that returns `{ wins: string[], losses: string[], summary: string }`.
+Since you don't need per-user identity on the other end ("it's just an inbox that pops up like Messenger"), each app authenticates with a single **shared account** that owns that side of every thread — one for you (owner), one for the mymanager side (staff inbox). Messages route by a `thread_id` you pick per employee (e.g. `jamison`), not by user id. Clean, no auth wiring in the other project beyond signing into that shared inbox account once.
 
-### 3. UI component
-`components/DayBriefingCard.tsx` — reads via `useSuspenseQuery`, renders:
-- Header: date + weekday + weather line
-- "Who's in today" list (from `roster` array, split by roster_type, off-staff greyed)
-- Training shifts block
-- Wins ✅ / Losses ⚠️ two-column list
-- Markets ticker row
-- Horoscope + AI summary footer
+## What gets built in this project (Carl)
 
-### 4. SQL
-`sql/schema.sql` — only what this feature needs:
-- `roster_staff`, `roster_training` (staffing source of truth)
-- `entries`, `meetings` (activity source for wins/losses)
-- `drafts_log` (activity signal)
-- `market_quotes_cache` (price fallback)
-- Full RLS + GRANTs on each
+### Inbox route `/messages`
+- Left column: thread list with employee name, last message preview, unread count, last-active time.
+- Right column: message stream (newest at bottom), Messenger-style bubbles, own messages right-aligned.
+- Composer: multiline text, attach button (image or file), send on ⌘/Ctrl+Enter.
+- Per-message: sender label, timestamp, "Seen ✓✓ 2:14pm" when the other side opens the thread, hover delete (soft delete — hidden for both sides, kept in DB for history/audit).
+- Realtime: new messages, read receipts, and deletes appear instantly via Supabase Realtime.
+- Sidebar badge: unread total next to the "Messages" nav item.
+- History: infinite scroll upward, grouped by day.
 
-### 5. Master prompt (the "even if it's a prompt" ask)
-`PROMPT.md` — a single self-contained system+user prompt you can paste into ChatGPT/Claude/Gemini with a JSON context blob. It returns the same shape the app uses, so you can wire it into any project without the server code if you want:
+### Data model (one migration)
+- `message_threads` — `id`, `slug` (e.g. `jamison`), `title`, `owner_user_id`, `staff_user_id`, timestamps.
+- `messages` — `id`, `thread_id`, `sender_user_id`, `body`, `attachments jsonb` (array of `{path, name, mime, size}`), `read_at`, `deleted_at`, `created_at`.
+- `message_reads` — `thread_id`, `user_id`, `last_read_at` (drives unread counts and ✓✓).
+- Realtime enabled on `messages` and `message_reads`.
+- Storage bucket `message-attachments` (private, signed URLs on read).
+- RLS: only the thread's `owner_user_id` and `staff_user_id` can read/write; storage policies mirror this.
 
-```
-SYSTEM: You are a daily-briefing assistant. Given today's roster,
-activity log, and location, return strict JSON: {
-  weather:{summary,high_c,low_c,precipitation,wind,location},
-  whos_in:[{name,shift,role}],
-  wins:[string],  losses:[string],
-  markets:[{symbol,price,change_pct,note}],
-  horoscope:{sagittarius,chinese_rat},
-  ai_summary: string
-}
-Rules: reference real numbers only; mark approximations; 3-5 sentence summary tying it all together.
+### Server functions (`src/lib/messages.functions.ts`)
+- `listThreads`, `getThread(slug)`, `listMessages(threadId, before?)`, `sendMessage(threadId, body, attachments)`, `markRead(threadId)`, `deleteMessage(id)`, `uploadAttachment` (signed upload URL). All use `requireSupabaseAuth`.
 
-USER: <paste today's context JSON here>
-```
+### UI files
+- `src/routes/messages.tsx` — inbox route (thread list + stream + composer).
+- `src/components/messages/ThreadList.tsx`, `MessageStream.tsx`, `MessageBubble.tsx`, `Composer.tsx`, `AttachmentPreview.tsx`.
+- Sidebar: add "Messages" item with realtime unread badge.
 
-### 6. README
-Wiring steps, required secrets (`LOVABLE_API_KEY` only — no Telegram, no OpenAI, no Anthropic), how to call the server fn, how to swap the prompt-only path in if you have no backend.
+## What you copy into mymanager.co.nz
 
-## Technical details
+A single drop-in folder — I'll place it at `/mnt/documents/messenger-portable/` and also keep an in-project copy so cross-project mention (`@personal-carl` from that project) can read it. Contents:
 
-- Model: `google/gemini-3-flash-preview` via `https://ai.gateway.lovable.dev/v1/chat/completions` with `response_format: json_object`
-- Auth: `requireSupabaseAuth` middleware on both server fns
-- Location hard-coded to Whanganui, NZ (parameterise in the new project by passing `location` into input)
-- Weekday derived from provided `date` param so the same fn works for tomorrow/yesterday previews
-- Market prices fetched live from `query1.finance.yahoo.com/v8/finance/chart/<symbol>` with a DB-cached fallback (never trust the LLM for prices)
+- `README.md` — 4-step wiring guide (env vars, sign in as staff inbox account, drop route in, add sidebar link).
+- `env.example` — the 3 env vars to add (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_SUPABASE_PROJECT_ID`) — all pointing at Carl's Cloud.
+- `sql/schema.sql` — same migration (idempotent, safe to skip if you use `@personal-carl` remixing later).
+- `lib/messages.functions.ts` — identical server functions.
+- `routes/inbox.tsx` — same UI, relabeled "Inbox" (no thread list needed — one shared staff account sees all threads addressed to it).
+- `components/messages/*` — same 5 components.
+- `PROMPT.md` — a one-shot LLM prompt version so you can also regenerate the UI in any tool from context alone.
 
-## Deliverables
+That folder is what makes the two projects **integrated and compatible** — same schema, same RPCs, same components. Anything you change on Carl's side, you copy the changed file across.
 
-```
-/mnt/documents/daily-briefing-source/
-  README.md
-  PROMPT.md                           ← standalone prompt you can paste anywhere
-  sql/schema.sql
-  lib/day-briefing.functions.ts
-  lib/wins-losses.functions.ts        ← NEW
-  components/DayBriefingCard.tsx      ← NEW
-  integrations/auth-middleware.ts
-  integrations/client.server.ts
-```
+## Scope of v1
+Text • image and file attachments (≤20 MB) • read receipts (✓✓ + timestamp) • delete for both sides • full searchable history per thread • realtime delivery • unread badge • folder-style keep/archive on each thread.
 
-Plus a zipped `daily-briefing-source.zip` for one-click download.
+## Out of scope for v1 (say the word to add)
+Voice notes • typing indicators • push/email notification when the other side is offline • group threads • message editing • end-to-end encryption.
 
-## Out of scope
-- Telegram webhook, voice transcription, intent classification, memory dedup — explicitly excluded.
-- No changes to the live app; this is a copy-paste export only.
+## Technical notes (for the record)
+- Both projects run against this Cloud instance's `SUPABASE_URL` + `SUPABASE_PUBLISHABLE_KEY`. RLS + `requireSupabaseAuth` gate everything — the publishable key is safe to ship in the other project's client bundle.
+- Realtime: `supabase.channel(thread:<id>).on('postgres_changes', ...)` in `useEffect`, torn down on unmount (per project realtime rules).
+- Attachments: client requests a signed upload URL from the server fn, uploads directly to Storage, then sends the message with the object path. Read side generates short-lived signed download URLs.
+- "Delete" is soft (`deleted_at`) so audit history is preserved; UI renders "Message deleted" in place.
+- Unread count = `messages` newer than the viewer's `message_reads.last_read_at` for that thread.

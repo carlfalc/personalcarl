@@ -9,6 +9,7 @@ import {
   BookOpen,
   CalendarDays,
   Mail,
+  MessageCircle,
   Image as ImageIcon,
   UserCircle2,
   Clock,
@@ -45,7 +46,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-type CountKey = "tasks" | "ideas" | "meetings" | "images";
+type CountKey = "tasks" | "ideas" | "meetings" | "images" | "messages";
 type CountColor = "red" | "green" | "black";
 
 type Item = {
@@ -62,6 +63,7 @@ const items: Array<Item> = [
   { id: "diary",     title: "Diary",     subtitle: "Notes & reflections",        url: "/diary",     icon: BookOpen },
   { id: "meetings",  title: "Meetings",  subtitle: "Calendar & agenda",          url: "/meetings",  icon: CalendarDays,  countKey: "meetings", countColor: "red" },
   { id: "email",     title: "Email",     subtitle: "Voice → Gmail drafts",       url: "/email",     icon: Mail },
+  { id: "messages",  title: "Messages",  subtitle: "Employee inbox",             url: "/messages",  icon: MessageCircle, countKey: "messages", countColor: "red" },
   { id: "images",    title: "Images",    subtitle: "Photos from Telegram",       url: "/images",    icon: ImageIcon,     countKey: "images",   countColor: "black" },
   { id: "schedules", title: "Schedules", subtitle: "Recurring AI briefings",     url: "/schedules", icon: Clock },
   { id: "roster",    title: "Roster",    subtitle: "Glasshouse weekly roster",   url: "/roster",    icon: Users },
@@ -87,11 +89,15 @@ function useSidebarCounts() {
   useRealtimeTable("entries", ["sidebar-counts"]);
   useRealtimeTable("meetings", ["sidebar-counts"]);
   useRealtimeTable("images", ["sidebar-counts"]);
+  // messages realtime handled inside /messages route; badge refreshes on staleTime tick + navigation
 
   return useQuery({
     queryKey: ["sidebar-counts"],
     queryFn: async (): Promise<Record<CountKey, number>> => {
       const nowIso = new Date().toISOString();
+      const { data: userRes } = await supabase.auth.getUser();
+      const uid = userRes.user?.id;
+
       const [tasks, ideas, meetings, images] = await Promise.all([
         supabase.from("entries").select("id", { count: "exact", head: true })
           .eq("type", "task").not("status", "in", "(done,deleted)"),
@@ -101,11 +107,37 @@ function useSidebarCounts() {
           .neq("status", "cancelled").gte("datetime", nowIso),
         supabase.from("images").select("id", { count: "exact", head: true }),
       ]);
+
+      let messagesUnread = 0;
+      if (uid) {
+        const { data: threads } = await supabase
+          .from("message_threads")
+          .select("id");
+        if (threads?.length) {
+          const { data: reads } = await supabase
+            .from("message_reads")
+            .select("thread_id, last_read_at")
+            .eq("user_id", uid);
+          const readMap = new Map((reads ?? []).map((r) => [r.thread_id, r.last_read_at]));
+          for (const t of threads) {
+            const since = readMap.get(t.id) ?? "1970-01-01T00:00:00Z";
+            const { count } = await supabase
+              .from("messages")
+              .select("id", { count: "exact", head: true })
+              .eq("thread_id", t.id)
+              .gt("created_at", since)
+              .neq("sender_user_id", uid);
+            messagesUnread += count ?? 0;
+          }
+        }
+      }
+
       return {
         tasks: tasks.count ?? 0,
         ideas: ideas.count ?? 0,
         meetings: meetings.count ?? 0,
         images: images.count ?? 0,
+        messages: messagesUnread,
       };
     },
     staleTime: 15_000,

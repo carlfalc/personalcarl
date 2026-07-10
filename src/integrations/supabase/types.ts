@@ -644,6 +644,103 @@ export type Database = {
         }
         Relationships: []
       }
+      message_reads: {
+        Row: {
+          last_read_at: string
+          thread_id: string
+          user_id: string
+        }
+        Insert: {
+          last_read_at?: string
+          thread_id: string
+          user_id: string
+        }
+        Update: {
+          last_read_at?: string
+          thread_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_reads_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "message_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      message_threads: {
+        Row: {
+          archived: boolean
+          created_at: string
+          id: string
+          owner_user_id: string
+          slug: string
+          staff_user_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          archived?: boolean
+          created_at?: string
+          id?: string
+          owner_user_id: string
+          slug: string
+          staff_user_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          archived?: boolean
+          created_at?: string
+          id?: string
+          owner_user_id?: string
+          slug?: string
+          staff_user_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      messages: {
+        Row: {
+          attachments: Json
+          body: string
+          created_at: string
+          deleted_at: string | null
+          id: string
+          sender_user_id: string
+          thread_id: string
+        }
+        Insert: {
+          attachments?: Json
+          body?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          sender_user_id: string
+          thread_id: string
+        }
+        Update: {
+          attachments?: Json
+          body?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          sender_user_id?: string
+          thread_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "message_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pending_email_intents: {
         Row: {
           body: string
