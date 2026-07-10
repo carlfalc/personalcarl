@@ -156,10 +156,16 @@ type ModalState =
   | { kind: "addStaff" }
   | null;
 
-const prettyDate = (d: string | null) => {
+const prettyDate = (d: string | null, startDay: number | null = null) => {
   if (!d) return "";
-  const dt = new Date(d + "T00:00:00");
-  return dt.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+  const [y, m, day] = d.split("-").map(Number);
+  const dt = new Date(y, (m ?? 1) - 1, day ?? 1);
+  const weekday =
+    startDay != null
+      ? ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][startDay]
+      : dt.toLocaleDateString(undefined, { weekday: "long" });
+  const rest = dt.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  return `${weekday}, ${rest}`;
 };
 
 function buildStaffHTML(title: string, weekDate: string | null, startDay: number | null, staff: string[], rows: Row[]) {
