@@ -200,6 +200,16 @@ function RosterPage() {
   const [mStart, setMStart] = useState("06:00");
   const [mEnd, setMEnd] = useState("10:30");
   const [mNewName, setMNewName] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const toggleSelected = (name: string) =>
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(name)) n.delete(name);
+      else n.add(name);
+      return n;
+    });
+  const clearSelected = () => setSelected(new Set());
 
   // Load + realtime
   useEffect(() => {
