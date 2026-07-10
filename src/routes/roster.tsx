@@ -533,6 +533,8 @@ function RosterPage() {
                     onAdd={openAdd}
                     onEdit={openEdit}
                     onDeleteStaff={deleteStaff}
+                    selected={selected.has(person)}
+                    onToggleSelected={toggleSelected}
                   />
                 );
               })}
