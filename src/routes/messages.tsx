@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { toast } from "sonner";
 import {
   listThreads,
   listMessages,
@@ -18,6 +17,10 @@ import { useAuthSession } from "@/hooks/useAuthSession";
 import { ThreadList } from "@/components/messages/ThreadList";
 import { MessageStream } from "@/components/messages/MessageStream";
 import { Composer } from "@/components/messages/Composer";
+
+const MYMANAGER_INBOX_USER_ID = import.meta.env.VITE_MYMANAGER_INBOX_USER_ID as string | undefined;
+const DEFAULT_SLUG = "mymanager";
+const DEFAULT_TITLE = "mymanager.co.nz";
 
 
 export const Route = createFileRoute("/messages")({
@@ -98,41 +101,34 @@ function MessagesPage() {
     qc.invalidateQueries({ queryKey: ["messages"] });
   };
 
-  const handleNew = async () => {
-    const slug = window.prompt(
-      "Employee slug (letters, numbers, dashes — e.g. jamison):",
-    )?.trim().toLowerCase();
-    if (!slug || !/^[a-z0-9-]+$/.test(slug)) {
-      if (slug) toast.error("Invalid slug");
-      return;
-    }
-    const title = window.prompt("Display name for this conversation:", slug)?.trim();
-    if (!title) return;
-    const staffUserId = window.prompt(
-      "Staff account user ID (the mymanager.co.nz inbox user's UUID):",
-    )?.trim();
-    if (!staffUserId) return;
-    try {
-      const t = await upsertThreadFn({ data: { slug, title, staffUserId } });
-      qc.invalidateQueries({ queryKey: ["messages", "threads"] });
-      setActiveId(t.id);
-      toast.success(`Thread ready: ${title}`);
-    } catch (e: any) {
-      toast.error(e.message ?? "Could not create thread");
-    }
-  };
+  // Auto-provision the default mymanager inbox thread once, silently.
+  useEffect(() => {
+    if (!userId) return;
+    if (!threadsQuery.data) return;
+    if (!MYMANAGER_INBOX_USER_ID) return;
+    if (threadsQuery.data.some((t) => t.slug === DEFAULT_SLUG)) return;
+    upsertThreadFn({
+      data: { slug: DEFAULT_SLUG, title: DEFAULT_TITLE, staffUserId: MYMANAGER_INBOX_USER_ID },
+    })
+      .then((t) => {
+        qc.invalidateQueries({ queryKey: ["messages", "threads"] });
+        setActiveId(t.id);
+      })
+      .catch(() => {
+        /* silent — banner below handles the missing-env case */
+      });
+  }, [userId, threadsQuery.data, upsertThreadFn, qc]);
 
   const handleArchive = async (id: string, archived: boolean) => {
     await setArchivedFn({ data: { threadId: id, archived } });
     qc.invalidateQueries({ queryKey: ["messages", "threads"] });
-    toast.success(archived ? "Archived" : "Unarchived");
+    void archived;
   };
 
   const handleDeleteThread = async (id: string) => {
     await deleteThreadFn({ data: { threadId: id } });
     if (activeId === id) setActiveId(null);
     qc.invalidateQueries({ queryKey: ["messages", "threads"] });
-    toast.success("Conversation deleted");
   };
 
   const visibleThreads = (threadsQuery.data ?? []).filter((t) => showArchived || !t.archived);
@@ -141,8 +137,13 @@ function MessagesPage() {
     <div className="flex h-[calc(100vh-3.5rem)] flex-col">
       <div className="border-b bg-background px-4 py-3">
         <h1 className="text-lg font-semibold">Messages</h1>
-        <p className="text-xs text-muted-foreground">Direct threads with your employees</p>
+        <p className="text-xs text-muted-foreground">Direct pipeline to your mymanager.co.nz inbox</p>
       </div>
+      {!MYMANAGER_INBOX_USER_ID && (
+        <div className="border-b bg-destructive/10 px-4 py-2 text-xs text-destructive">
+          Inbox not configured. Set <code>VITE_MYMANAGER_INBOX_USER_ID</code> to enable messaging.
+        </div>
+      )}
       <div className="flex items-center gap-2 border-b px-4 py-1.5 text-xs text-muted-foreground">
         <label className="flex items-center gap-1.5 cursor-pointer">
           <input
@@ -159,7 +160,6 @@ function MessagesPage() {
             threads={visibleThreads}
             activeId={activeId}
             onSelect={setActiveId}
-            onNew={handleNew}
             onArchive={handleArchive}
             onDelete={handleDeleteThread}
           />
