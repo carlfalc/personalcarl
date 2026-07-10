@@ -389,9 +389,18 @@ function RosterPage() {
     await supabase.from("roster_snapshots").delete().eq("id", id);
   };
 
+  const exportStaff = useMemo(
+     () => (selected.size ? staffList.filter((s) => selected.has(s)) : staffList),
+    [selected, staffList],
+  );
+  const exportRows = useMemo(
+    () => (selected.size ? rows.filter((r) => selected.has(r.staff_name)) : rows),
+    [selected, rows],
+  );
+
   const downloadStaff = () => {
     const title = rosterType === "manager" ? "Management Roster" : "Roster";
-    const blob = new Blob([buildStaffHTML(title, weekDate, weekStartDay, staffList, rows)], { type: "text/html" });
+    const blob = new Blob([buildStaffHTML(title, weekDate, weekStartDay, exportStaff, exportRows)], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -403,7 +412,7 @@ function RosterPage() {
   };
   const shareStaff = async () => {
     const title = rosterType === "manager" ? "Management Roster" : "Roster";
-    const html = buildStaffHTML(title, weekDate, weekStartDay, staffList, rows);
+    const html = buildStaffHTML(title, weekDate, weekStartDay, exportStaff, exportRows);
     try {
       const file = new File([html], `Glasshouse_${rosterType === "manager" ? "Management" : "Staff"}_Roster.html`, { type: "text/html" });
       const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean };
@@ -415,6 +424,20 @@ function RosterPage() {
       /* fall through */
     }
     downloadStaff();
+  };
+  const printStaff = () => {
+    if (!selected.size) {
+      window.print();
+      return;
+    }
+    const title = rosterType === "manager" ? "Management Roster" : "Roster";
+    const html = buildStaffHTML(title, weekDate, weekStartDay, exportStaff, exportRows);
+    const w = window.open("", "_blank", "width=1100,height=800");
+    if (!w) return;
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    w.onload = () => { w.focus(); w.print(); };
   };
 
   return (
