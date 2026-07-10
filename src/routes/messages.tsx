@@ -101,29 +101,23 @@ function MessagesPage() {
     qc.invalidateQueries({ queryKey: ["messages"] });
   };
 
-  const handleNew = async () => {
-    const slug = window.prompt(
-      "Employee slug (letters, numbers, dashes — e.g. jamison):",
-    )?.trim().toLowerCase();
-    if (!slug || !/^[a-z0-9-]+$/.test(slug)) {
-      if (slug) toast.error("Invalid slug");
-      return;
-    }
-    const title = window.prompt("Display name for this conversation:", slug)?.trim();
-    if (!title) return;
-    const staffUserId = window.prompt(
-      "Staff account user ID (the mymanager.co.nz inbox user's UUID):",
-    )?.trim();
-    if (!staffUserId) return;
-    try {
-      const t = await upsertThreadFn({ data: { slug, title, staffUserId } });
-      qc.invalidateQueries({ queryKey: ["messages", "threads"] });
-      setActiveId(t.id);
-      toast.success(`Thread ready: ${title}`);
-    } catch (e: any) {
-      toast.error(e.message ?? "Could not create thread");
-    }
-  };
+  // Auto-provision the default mymanager inbox thread once, silently.
+  useEffect(() => {
+    if (!userId) return;
+    if (!threadsQuery.data) return;
+    if (!MYMANAGER_INBOX_USER_ID) return;
+    if (threadsQuery.data.some((t) => t.slug === DEFAULT_SLUG)) return;
+    upsertThreadFn({
+      data: { slug: DEFAULT_SLUG, title: DEFAULT_TITLE, staffUserId: MYMANAGER_INBOX_USER_ID },
+    })
+      .then((t) => {
+        qc.invalidateQueries({ queryKey: ["messages", "threads"] });
+        setActiveId(t.id);
+      })
+      .catch(() => {
+        /* silent — banner below handles the missing-env case */
+      });
+  }, [userId, threadsQuery.data, upsertThreadFn, qc]);
 
   const handleArchive = async (id: string, archived: boolean) => {
     await setArchivedFn({ data: { threadId: id, archived } });
