@@ -137,8 +137,13 @@ function MessagesPage() {
     <div className="flex h-[calc(100vh-3.5rem)] flex-col">
       <div className="border-b bg-background px-4 py-3">
         <h1 className="text-lg font-semibold">Messages</h1>
-        <p className="text-xs text-muted-foreground">Direct threads with your employees</p>
+        <p className="text-xs text-muted-foreground">Direct pipeline to your mymanager.co.nz inbox</p>
       </div>
+      {!MYMANAGER_INBOX_USER_ID && (
+        <div className="border-b bg-destructive/10 px-4 py-2 text-xs text-destructive">
+          Inbox not configured. Set <code>VITE_MYMANAGER_INBOX_USER_ID</code> to enable messaging.
+        </div>
+      )}
       <div className="flex items-center gap-2 border-b px-4 py-1.5 text-xs text-muted-foreground">
         <label className="flex items-center gap-1.5 cursor-pointer">
           <input
