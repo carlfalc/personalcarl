@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { Archive, Trash2, Plus } from "lucide-react";
+import { Archive, Trash2 } from "lucide-react";
 import type { ThreadSummary } from "@/lib/messages.functions";
 
 function relTime(iso: string) {
@@ -18,14 +18,12 @@ export function ThreadList({
   threads,
   activeId,
   onSelect,
-  onNew,
   onArchive,
   onDelete,
 }: {
   threads: ThreadSummary[];
   activeId: string | null;
   onSelect: (id: string) => void;
-  onNew: () => void;
   onArchive: (id: string, archived: boolean) => void;
   onDelete: (id: string) => void;
 }) {
@@ -33,17 +31,11 @@ export function ThreadList({
     <div className="flex h-full w-full flex-col">
       <div className="flex items-center justify-between border-b px-3 py-2">
         <h2 className="text-sm font-semibold">Inbox</h2>
-        <button
-          onClick={onNew}
-          className="flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs text-primary-foreground hover:bg-primary/90"
-        >
-          <Plus className="h-3.5 w-3.5" /> New
-        </button>
       </div>
       <div className="flex-1 overflow-y-auto">
         {threads.length === 0 && (
           <div className="p-6 text-center text-sm text-muted-foreground">
-            No conversations yet. Click "New" to start one.
+            Setting up your inbox…
           </div>
         )}
         {threads.map((t) => (
