@@ -95,7 +95,10 @@ const STYLE = `
 .gh-name .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gh-name .xbtn{border:0;background:transparent;color:#b3261e;cursor:pointer;font-size:14px;line-height:1;padding:2px 4px;border-radius:4px}
 .gh-name .xbtn:hover{background:#fdeceb}
+.gh-name .pick{margin:0 4px 0 0;cursor:pointer;accent-color:#0d3a2c}
 .gh-hours-badge{font-size:10px;font-weight:600;color:#8d8d85}
+.gh-selbar{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:#0d3a2c;background:#fff8e6;border:1px solid #C9A961;border-radius:8px;padding:5px 10px}
+.gh-selbar .clr{border:0;background:transparent;color:#0d3a2c;cursor:pointer;font-weight:600;text-decoration:underline}
 .gh-shift{background:#E1F5EE;color:#085041;border-radius:3px;padding:4px 6px;font-size:10px;font-weight:600;line-height:1.3;cursor:pointer;text-align:center;border:0;white-space:nowrap}
 .gh-shift:hover{opacity:.85}
 .gh-off{background:#f4f3ec;color:#8d8d85;font-size:10px;font-weight:600;border-radius:3px;padding:4px 6px;text-align:center;cursor:pointer;border:0}
@@ -129,7 +132,7 @@ const STYLE = `
   html,body{background:#fff!important}
   [data-sidebar],aside,nav[aria-label*="sidebar" i]{display:none!important}
   header:not(.gh-topbar){display:none!important}
-  .gh-toolbar,.gh-empty,.gh-snap-panel,.gh-rtoggle,.gh-name .xbtn,.gh-daypick{display:none!important}
+  .gh-toolbar,.gh-empty,.gh-snap-panel,.gh-rtoggle,.gh-name .xbtn,.gh-name .pick,.gh-selbar,.gh-daypick{display:none!important}
   .gh-modal-backdrop{display:none!important}
   .gh-datepick input{border:0;background:transparent;padding:0}
   .gh-scroll{overflow:visible!important}
@@ -197,6 +200,16 @@ function RosterPage() {
   const [mStart, setMStart] = useState("06:00");
   const [mEnd, setMEnd] = useState("10:30");
   const [mNewName, setMNewName] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const toggleSelected = (name: string) =>
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(name)) n.delete(name);
+      else n.add(name);
+      return n;
+    });
+  const clearSelected = () => setSelected(new Set());
 
   // Load + realtime
   useEffect(() => {
@@ -376,9 +389,18 @@ function RosterPage() {
     await supabase.from("roster_snapshots").delete().eq("id", id);
   };
 
+  const exportStaff = useMemo(
+     () => (selected.size ? staffList.filter((s) => selected.has(s)) : staffList),
+    [selected, staffList],
+  );
+  const exportRows = useMemo(
+    () => (selected.size ? rows.filter((r) => selected.has(r.staff_name)) : rows),
+    [selected, rows],
+  );
+
   const downloadStaff = () => {
     const title = rosterType === "manager" ? "Management Roster" : "Roster";
-    const blob = new Blob([buildStaffHTML(title, weekDate, weekStartDay, staffList, rows)], { type: "text/html" });
+    const blob = new Blob([buildStaffHTML(title, weekDate, weekStartDay, exportStaff, exportRows)], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -390,7 +412,7 @@ function RosterPage() {
   };
   const shareStaff = async () => {
     const title = rosterType === "manager" ? "Management Roster" : "Roster";
-    const html = buildStaffHTML(title, weekDate, weekStartDay, staffList, rows);
+    const html = buildStaffHTML(title, weekDate, weekStartDay, exportStaff, exportRows);
     try {
       const file = new File([html], `Glasshouse_${rosterType === "manager" ? "Management" : "Staff"}_Roster.html`, { type: "text/html" });
       const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean };
@@ -402,6 +424,20 @@ function RosterPage() {
       /* fall through */
     }
     downloadStaff();
+  };
+  const printStaff = () => {
+    if (!selected.size) {
+      window.print();
+      return;
+    }
+    const title = rosterType === "manager" ? "Management Roster" : "Roster";
+    const html = buildStaffHTML(title, weekDate, weekStartDay, exportStaff, exportRows);
+    const w = window.open("", "_blank", "width=1100,height=800");
+    if (!w) return;
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    w.onload = () => { w.focus(); w.print(); };
   };
 
   return (
@@ -459,9 +495,15 @@ function RosterPage() {
             {!staffView && (
               <button className="gh-tool accent" onClick={saveSnapshot}>Save roster</button>
             )}
-            <button className="gh-tool" onClick={() => window.print()}>Print</button>
-            <button className="gh-tool" onClick={shareStaff}>Share staff copy</button>
-            <button className="gh-tool" onClick={downloadStaff}>Download staff copy</button>
+            <button className="gh-tool" onClick={printStaff}>Print{selected.size ? ` (${selected.size})` : ""}</button>
+            <button className="gh-tool" onClick={shareStaff}>Share staff copy{selected.size ? ` (${selected.size})` : ""}</button>
+            <button className="gh-tool" onClick={downloadStaff}>Download staff copy{selected.size ? ` (${selected.size})` : ""}</button>
+            {selected.size > 0 && (
+              <span className="gh-selbar">
+                {selected.size} selected · only ticked names will be exported
+                <button className="clr" onClick={clearSelected}>Clear</button>
+              </span>
+            )}
           </div>
         </div>
 
@@ -491,6 +533,8 @@ function RosterPage() {
                     onAdd={openAdd}
                     onEdit={openEdit}
                     onDeleteStaff={deleteStaff}
+                    selected={selected.has(person)}
+                    onToggleSelected={toggleSelected}
                   />
                 );
               })}
@@ -647,6 +691,8 @@ function RosterRow({
   onAdd,
   onEdit,
   onDeleteStaff,
+  selected,
+  onToggleSelected,
 }: {
   person: string;
   mins: number;
@@ -657,11 +703,21 @@ function RosterRow({
   onAdd: (staff: string, day: string) => void;
   onEdit: (id: string) => void;
   onDeleteStaff: (name: string) => void;
+  selected: boolean;
+  onToggleSelected: (name: string) => void;
 }) {
   return (
     <>
       <div className="gh-cell gh-namecell">
         <span className="gh-name">
+          <input
+            type="checkbox"
+            className="pick"
+            checked={selected}
+            onChange={() => onToggleSelected(person)}
+            title={`Select ${person} for export`}
+            aria-label={`Select ${person}`}
+          />
           <span className="nm">{person}</span>
           {!staffView && mins > 0 && <span className="gh-hours-badge">{fmtHrs(mins)}</span>}
           {!staffView && (
