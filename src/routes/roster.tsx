@@ -691,6 +691,8 @@ function RosterRow({
   onAdd,
   onEdit,
   onDeleteStaff,
+  selected,
+  onToggleSelected,
 }: {
   person: string;
   mins: number;
@@ -701,11 +703,21 @@ function RosterRow({
   onAdd: (staff: string, day: string) => void;
   onEdit: (id: string) => void;
   onDeleteStaff: (name: string) => void;
+  selected: boolean;
+  onToggleSelected: (name: string) => void;
 }) {
   return (
     <>
       <div className="gh-cell gh-namecell">
         <span className="gh-name">
+          <input
+            type="checkbox"
+            className="pick"
+            checked={selected}
+            onChange={() => onToggleSelected(person)}
+            title={`Select ${person} for export`}
+            aria-label={`Select ${person}`}
+          />
           <span className="nm">{person}</span>
           {!staffView && mins > 0 && <span className="gh-hours-badge">{fmtHrs(mins)}</span>}
           {!staffView && (
