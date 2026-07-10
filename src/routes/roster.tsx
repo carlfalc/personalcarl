@@ -495,9 +495,15 @@ function RosterPage() {
             {!staffView && (
               <button className="gh-tool accent" onClick={saveSnapshot}>Save roster</button>
             )}
-            <button className="gh-tool" onClick={() => window.print()}>Print</button>
-            <button className="gh-tool" onClick={shareStaff}>Share staff copy</button>
-            <button className="gh-tool" onClick={downloadStaff}>Download staff copy</button>
+            <button className="gh-tool" onClick={printStaff}>Print{selected.size ? ` (${selected.size})` : ""}</button>
+            <button className="gh-tool" onClick={shareStaff}>Share staff copy{selected.size ? ` (${selected.size})` : ""}</button>
+            <button className="gh-tool" onClick={downloadStaff}>Download staff copy{selected.size ? ` (${selected.size})` : ""}</button>
+            {selected.size > 0 && (
+              <span className="gh-selbar">
+                {selected.size} selected · only ticked names will be exported
+                <button className="clr" onClick={clearSelected}>Clear</button>
+              </span>
+            )}
           </div>
         </div>
 
