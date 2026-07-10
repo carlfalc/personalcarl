@@ -156,10 +156,16 @@ type ModalState =
   | { kind: "addStaff" }
   | null;
 
-const prettyDate = (d: string | null) => {
+const prettyDate = (d: string | null, startDay: number | null = null) => {
   if (!d) return "";
-  const dt = new Date(d + "T00:00:00");
-  return dt.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+  const [y, m, day] = d.split("-").map(Number);
+  const dt = new Date(y, (m ?? 1) - 1, day ?? 1);
+  const weekday =
+    startDay != null
+      ? ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][startDay]
+      : dt.toLocaleDateString(undefined, { weekday: "long" });
+  const rest = dt.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  return `${weekday}, ${rest}`;
 };
 
 function buildStaffHTML(title: string, weekDate: string | null, startDay: number | null, staff: string[], rows: Row[]) {
@@ -181,7 +187,7 @@ function buildStaffHTML(title: string, weekDate: string | null, startDay: number
     });
   });
   const dateHtml = weekDate
-    ? `<span>Pay week commencing ${prettyDate(weekDate)}</span>`
+    ? `<span>Pay week commencing ${prettyDate(weekDate, startDay)}</span>`
     : (startDay != null ? `<span>Pay week commencing ${DAY_ABBR[startDay]}</span>` : "");
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title><style>${STYLE}</style></head><body><div class="gh-wrap"><div class="gh-topbar"><div class="gh-brand"><h1>Glasshouse</h1><span>${title}</span>${dateHtml}</div></div><div class="gh-grid nototal">${html}</div></div></body></html>`;
 }
@@ -374,7 +380,7 @@ function RosterPage() {
     const { data: u } = await supabase.auth.getUser();
     await supabase.from("roster_snapshots").insert({
       saved_by: u.user?.id ?? null,
-      label: weekDate ? `Week of ${prettyDate(weekDate)}` : null,
+      label: weekDate ? `Week of ${prettyDate(weekDate, weekStartDay)}` : null,
       data: rows,
       roster_type: rosterType,
     });
