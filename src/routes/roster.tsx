@@ -132,7 +132,7 @@ const STYLE = `
   html,body{background:#fff!important}
   [data-sidebar],aside,nav[aria-label*="sidebar" i]{display:none!important}
   header:not(.gh-topbar){display:none!important}
-  .gh-toolbar,.gh-empty,.gh-snap-panel,.gh-rtoggle,.gh-name .xbtn,.gh-daypick{display:none!important}
+  .gh-toolbar,.gh-empty,.gh-snap-panel,.gh-rtoggle,.gh-name .xbtn,.gh-name .pick,.gh-selbar,.gh-daypick{display:none!important}
   .gh-modal-backdrop{display:none!important}
   .gh-datepick input{border:0;background:transparent;padding:0}
   .gh-scroll{overflow:visible!important}
