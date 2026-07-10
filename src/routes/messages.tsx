@@ -18,7 +18,7 @@ import { useAuthSession } from "@/hooks/useAuthSession";
 import { ThreadList } from "@/components/messages/ThreadList";
 import { MessageStream } from "@/components/messages/MessageStream";
 import { Composer } from "@/components/messages/Composer";
-import { PageHeader } from "@/components/PageHeader";
+
 
 export const Route = createFileRoute("/messages")({
   component: MessagesPage,
@@ -139,7 +139,10 @@ function MessagesPage() {
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col">
-      <PageHeader title="Messages" subtitle="Direct threads with your employees" />
+      <div className="border-b bg-background px-4 py-3">
+        <h1 className="text-lg font-semibold">Messages</h1>
+        <p className="text-xs text-muted-foreground">Direct threads with your employees</p>
+      </div>
       <div className="flex items-center gap-2 border-b px-4 py-1.5 text-xs text-muted-foreground">
         <label className="flex items-center gap-1.5 cursor-pointer">
           <input
