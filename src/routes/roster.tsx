@@ -95,7 +95,10 @@ const STYLE = `
 .gh-name .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gh-name .xbtn{border:0;background:transparent;color:#b3261e;cursor:pointer;font-size:14px;line-height:1;padding:2px 4px;border-radius:4px}
 .gh-name .xbtn:hover{background:#fdeceb}
+.gh-name .pick{margin:0 4px 0 0;cursor:pointer;accent-color:#0d3a2c}
 .gh-hours-badge{font-size:10px;font-weight:600;color:#8d8d85}
+.gh-selbar{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:#0d3a2c;background:#fff8e6;border:1px solid #C9A961;border-radius:8px;padding:5px 10px}
+.gh-selbar .clr{border:0;background:transparent;color:#0d3a2c;cursor:pointer;font-weight:600;text-decoration:underline}
 .gh-shift{background:#E1F5EE;color:#085041;border-radius:3px;padding:4px 6px;font-size:10px;font-weight:600;line-height:1.3;cursor:pointer;text-align:center;border:0;white-space:nowrap}
 .gh-shift:hover{opacity:.85}
 .gh-off{background:#f4f3ec;color:#8d8d85;font-size:10px;font-weight:600;border-radius:3px;padding:4px 6px;text-align:center;cursor:pointer;border:0}
