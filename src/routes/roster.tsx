@@ -380,7 +380,7 @@ function RosterPage() {
     const { data: u } = await supabase.auth.getUser();
     await supabase.from("roster_snapshots").insert({
       saved_by: u.user?.id ?? null,
-      label: weekDate ? `Week of ${prettyDate(weekDate)}` : null,
+      label: weekDate ? `Week of ${prettyDate(weekDate, weekStartDay)}` : null,
       data: rows,
       roster_type: rosterType,
     });
