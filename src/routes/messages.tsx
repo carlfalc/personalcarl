@@ -122,14 +122,13 @@ function MessagesPage() {
   const handleArchive = async (id: string, archived: boolean) => {
     await setArchivedFn({ data: { threadId: id, archived } });
     qc.invalidateQueries({ queryKey: ["messages", "threads"] });
-    toast.success(archived ? "Archived" : "Unarchived");
+    void archived;
   };
 
   const handleDeleteThread = async (id: string) => {
     await deleteThreadFn({ data: { threadId: id } });
     if (activeId === id) setActiveId(null);
     qc.invalidateQueries({ queryKey: ["messages", "threads"] });
-    toast.success("Conversation deleted");
   };
 
   const visibleThreads = (threadsQuery.data ?? []).filter((t) => showArchived || !t.archived);
@@ -156,7 +155,6 @@ function MessagesPage() {
             threads={visibleThreads}
             activeId={activeId}
             onSelect={setActiveId}
-            onNew={handleNew}
             onArchive={handleArchive}
             onDelete={handleDeleteThread}
           />
