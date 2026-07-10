@@ -86,6 +86,27 @@ function MessagesPage() {
     };
   }, [userId, qc]);
 
+  // Realtime: focused per-thread subscription for the active (Carl) thread so
+  // new sends appear instantly without waiting on the global channel.
+  useEffect(() => {
+    if (!activeId) return;
+    const channel = supabase
+      .channel(`thread:${activeId}:messages`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "messages", filter: `thread_id=eq.${activeId}` },
+        () => {
+          qc.invalidateQueries({ queryKey: ["messages", "list", activeId] });
+          qc.invalidateQueries({ queryKey: ["messages", "threads"] });
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeId, qc]);
+
+
   // Mark read when opening or receiving in active thread
   useEffect(() => {
     if (!activeId || !messagesQuery.data) return;
