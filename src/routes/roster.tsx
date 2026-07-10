@@ -455,9 +455,7 @@ function RosterPage() {
                 Staff view
               </button>
             </div>
-            {!staffView && (
-              <button className="gh-tool primary" onClick={openAddStaff}>{addLabel}</button>
-            )}
+            <button className="gh-tool primary" onClick={openAddStaff}>{addLabel}</button>
             {!staffView && (
               <button className="gh-tool accent" onClick={saveSnapshot}>Save roster</button>
             )}
