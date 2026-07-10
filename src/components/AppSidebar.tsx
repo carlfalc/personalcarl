@@ -89,8 +89,7 @@ function useSidebarCounts() {
   useRealtimeTable("entries", ["sidebar-counts"]);
   useRealtimeTable("meetings", ["sidebar-counts"]);
   useRealtimeTable("images", ["sidebar-counts"]);
-  useRealtimeTable("messages", ["sidebar-counts"]);
-  useRealtimeTable("message_reads", ["sidebar-counts"]);
+  // messages realtime handled inside /messages route; badge refreshes on staleTime tick + navigation
 
   return useQuery({
     queryKey: ["sidebar-counts"],
