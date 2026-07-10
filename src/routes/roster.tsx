@@ -187,7 +187,7 @@ function buildStaffHTML(title: string, weekDate: string | null, startDay: number
     });
   });
   const dateHtml = weekDate
-    ? `<span>Pay week commencing ${prettyDate(weekDate)}</span>`
+    ? `<span>Pay week commencing ${prettyDate(weekDate, startDay)}</span>`
     : (startDay != null ? `<span>Pay week commencing ${DAY_ABBR[startDay]}</span>` : "");
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title><style>${STYLE}</style></head><body><div class="gh-wrap"><div class="gh-topbar"><div class="gh-brand"><h1>Glasshouse</h1><span>${title}</span>${dateHtml}</div></div><div class="gh-grid nototal">${html}</div></div></body></html>`;
 }
