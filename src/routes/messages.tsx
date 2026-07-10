@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { toast } from "sonner";
 import {
   listThreads,
   listMessages,
@@ -18,6 +17,10 @@ import { useAuthSession } from "@/hooks/useAuthSession";
 import { ThreadList } from "@/components/messages/ThreadList";
 import { MessageStream } from "@/components/messages/MessageStream";
 import { Composer } from "@/components/messages/Composer";
+
+const MYMANAGER_INBOX_USER_ID = import.meta.env.VITE_MYMANAGER_INBOX_USER_ID as string | undefined;
+const DEFAULT_SLUG = "mymanager";
+const DEFAULT_TITLE = "mymanager.co.nz";
 
 
 export const Route = createFileRoute("/messages")({
