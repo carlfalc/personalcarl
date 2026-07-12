@@ -36,12 +36,13 @@ function ImagesPage() {
 
   const handleUpload = async (files: FileList | null) => {
     if (!files?.length) return;
+    const fileList = Array.from(files);
     const { data: userData, error: uErr } = await supabase.auth.getUser();
     if (uErr || !userData.user) { toast.error("Not signed in"); return; }
     const userId = userData.user.id;
     setUploading(true);
     let ok = 0;
-    for (const file of Array.from(files)) {
+    for (const file of fileList) {
       if (!file.type.startsWith("image/")) { toast.error(`${file.name}: not an image`); continue; }
       if (file.size > 20 * 1024 * 1024) { toast.error(`${file.name}: exceeds 20 MB`); continue; }
       try {
