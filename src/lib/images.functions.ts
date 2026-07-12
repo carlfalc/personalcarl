@@ -86,3 +86,45 @@ export const getImagesForAttach = createServerFn({ method: "POST" })
       signed_url: urls.get(r.storage_path) ?? "",
     }));
   });
+
+export const recordUploadedImage = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: {
+    storage_path: string;
+    mime_type?: string | null;
+    size_bytes?: number | null;
+    width?: number | null;
+    height?: number | null;
+    caption?: string | null;
+  }) =>
+    z.object({
+      storage_path: z.string().min(1),
+      mime_type: z.string().nullable().optional(),
+      size_bytes: z.number().int().nonnegative().nullable().optional(),
+      width: z.number().int().positive().nullable().optional(),
+      height: z.number().int().positive().nullable().optional(),
+      caption: z.string().max(500).nullable().optional(),
+    }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    if (!data.storage_path.startsWith(`${userId}/`)) {
+      throw new Error("Invalid storage path");
+    }
+    const { data: row, error } = await supabase
+      .from("images")
+      .insert({
+        user_id: userId,
+        storage_path: data.storage_path,
+        mime_type: data.mime_type ?? null,
+        size_bytes: data.size_bytes ?? null,
+        width: data.width ?? null,
+        height: data.height ?? null,
+        caption: data.caption ?? null,
+        source: "upload",
+      })
+      .select("id")
+      .single();
+    if (error) throw new Error(error.message);
+    return { id: row.id as string };
+  });

@@ -1,14 +1,14 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
-import { X, Share2, Printer, FileDown, Paperclip, ImageIcon } from "lucide-react";
+import { X, Share2, Printer, FileDown, Paperclip, ImageIcon, Upload, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { listImages, deleteImage, type ImageRow } from "@/lib/images.functions";
+import { listImages, deleteImage, recordUploadedImage, type ImageRow } from "@/lib/images.functions";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/images")({
@@ -19,8 +19,57 @@ export const Route = createFileRoute("/images")({
 function ImagesPage() {
   const list = useServerFn(listImages);
   const del = useServerFn(deleteImage);
+  const record = useServerFn(recordUploadedImage);
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const readDims = (file: File) =>
+    new Promise<{ w: number | null; h: number | null }>((resolve) => {
+      const url = URL.createObjectURL(file);
+      const im = new Image();
+      im.onload = () => { resolve({ w: im.naturalWidth, h: im.naturalHeight }); URL.revokeObjectURL(url); };
+      im.onerror = () => { resolve({ w: null, h: null }); URL.revokeObjectURL(url); };
+      im.src = url;
+    });
+
+  const handleUpload = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const { data: userData, error: uErr } = await supabase.auth.getUser();
+    if (uErr || !userData.user) { toast.error("Not signed in"); return; }
+    const userId = userData.user.id;
+    setUploading(true);
+    let ok = 0;
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith("image/")) { toast.error(`${file.name}: not an image`); continue; }
+      if (file.size > 20 * 1024 * 1024) { toast.error(`${file.name}: exceeds 20 MB`); continue; }
+      try {
+        const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+        const path = `${userId}/uploads/${crypto.randomUUID()}.${ext}`;
+        const { error: upErr } = await supabase.storage
+          .from("telegram-images")
+          .upload(path, file, { contentType: file.type, upsert: false });
+        if (upErr) throw upErr;
+        const dims = await readDims(file);
+        await record({ data: {
+          storage_path: path,
+          mime_type: file.type,
+          size_bytes: file.size,
+          width: dims.w,
+          height: dims.h,
+        }});
+        ok++;
+      } catch (e) {
+        toast.error(`${file.name}: ${(e as Error).message}`);
+      }
+    }
+    setUploading(false);
+    if (ok > 0) {
+      toast.success(`Uploaded ${ok} image${ok === 1 ? "" : "s"}`);
+      qc.invalidateQueries({ queryKey: ["images"] });
+    }
+  };
 
   const { data: images = [], isLoading } = useQuery({
     queryKey: ["images"],
@@ -130,17 +179,29 @@ function ImagesPage() {
         <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-cyan-200 to-teal-400 flex items-center justify-center">
           <ImageIcon className="h-6 w-6" />
         </div>
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold">Images</h1>
-          <p className="text-sm text-muted-foreground">Photos you send to the Telegram bot land here. Share, print, save as PDF, or attach to an email.</p>
+          <p className="text-sm text-muted-foreground">Photos you send to the Telegram bot land here — or upload from your device. Share, print, save as PDF, or attach to an email.</p>
         </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(e) => { handleUpload(e.target.files); e.target.value = ""; }}
+        />
+        <Button onClick={() => fileRef.current?.click()} disabled={uploading} className="gap-2">
+          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+          {uploading ? "Uploading…" : "Upload"}
+        </Button>
       </div>
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : images.length === 0 ? (
         <Card className="p-10 text-center">
-          <p className="text-muted-foreground">No images yet. Send a photo to your Telegram bot to see it here.</p>
+          <p className="text-muted-foreground">No images yet. Upload from your device or send a photo to your Telegram bot.</p>
         </Card>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
