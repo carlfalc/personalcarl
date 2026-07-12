@@ -279,8 +279,8 @@ function RosterPage() {
   }, [rows, rosterType]);
 
   const staffView = mode === "staff";
-  // Manager roster always shows hours/totals (even in staff view); only the Staff roster hides them in staff view.
-  const showTotals = rosterType === "manager" || !staffView;
+  // Always show hours/totals so staff copies (print/share/download) include calculated hours.
+  const showTotals = true;
 
   const personMins = (p: string) =>
     rows.filter((r) => r.staff_name === p).reduce((a, r) => a + entryHrs(r), 0);
