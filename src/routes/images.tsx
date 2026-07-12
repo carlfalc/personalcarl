@@ -179,10 +179,22 @@ function ImagesPage() {
         <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-cyan-200 to-teal-400 flex items-center justify-center">
           <ImageIcon className="h-6 w-6" />
         </div>
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold">Images</h1>
-          <p className="text-sm text-muted-foreground">Photos you send to the Telegram bot land here. Share, print, save as PDF, or attach to an email.</p>
+          <p className="text-sm text-muted-foreground">Photos you send to the Telegram bot land here — or upload from your device. Share, print, save as PDF, or attach to an email.</p>
         </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(e) => { handleUpload(e.target.files); e.target.value = ""; }}
+        />
+        <Button onClick={() => fileRef.current?.click()} disabled={uploading} className="gap-2">
+          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+          {uploading ? "Uploading…" : "Upload"}
+        </Button>
       </div>
 
       {isLoading ? (
