@@ -19,8 +19,57 @@ export const Route = createFileRoute("/images")({
 function ImagesPage() {
   const list = useServerFn(listImages);
   const del = useServerFn(deleteImage);
+  const record = useServerFn(recordUploadedImage);
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const readDims = (file: File) =>
+    new Promise<{ w: number | null; h: number | null }>((resolve) => {
+      const url = URL.createObjectURL(file);
+      const im = new Image();
+      im.onload = () => { resolve({ w: im.naturalWidth, h: im.naturalHeight }); URL.revokeObjectURL(url); };
+      im.onerror = () => { resolve({ w: null, h: null }); URL.revokeObjectURL(url); };
+      im.src = url;
+    });
+
+  const handleUpload = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const { data: userData, error: uErr } = await supabase.auth.getUser();
+    if (uErr || !userData.user) { toast.error("Not signed in"); return; }
+    const userId = userData.user.id;
+    setUploading(true);
+    let ok = 0;
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith("image/")) { toast.error(`${file.name}: not an image`); continue; }
+      if (file.size > 20 * 1024 * 1024) { toast.error(`${file.name}: exceeds 20 MB`); continue; }
+      try {
+        const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+        const path = `${userId}/uploads/${crypto.randomUUID()}.${ext}`;
+        const { error: upErr } = await supabase.storage
+          .from("telegram-images")
+          .upload(path, file, { contentType: file.type, upsert: false });
+        if (upErr) throw upErr;
+        const dims = await readDims(file);
+        await record({ data: {
+          storage_path: path,
+          mime_type: file.type,
+          size_bytes: file.size,
+          width: dims.w,
+          height: dims.h,
+        }});
+        ok++;
+      } catch (e) {
+        toast.error(`${file.name}: ${(e as Error).message}`);
+      }
+    }
+    setUploading(false);
+    if (ok > 0) {
+      toast.success(`Uploaded ${ok} image${ok === 1 ? "" : "s"}`);
+      qc.invalidateQueries({ queryKey: ["images"] });
+    }
+  };
 
   const { data: images = [], isLoading } = useQuery({
     queryKey: ["images"],
