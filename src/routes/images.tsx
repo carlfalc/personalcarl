@@ -1,14 +1,14 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
-import { X, Share2, Printer, FileDown, Paperclip, ImageIcon } from "lucide-react";
+import { X, Share2, Printer, FileDown, Paperclip, ImageIcon, Upload, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { listImages, deleteImage, type ImageRow } from "@/lib/images.functions";
+import { listImages, deleteImage, recordUploadedImage, type ImageRow } from "@/lib/images.functions";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/images")({
