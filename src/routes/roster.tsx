@@ -85,14 +85,11 @@ const STYLE = `
 .gh-tool.primary{background:#0d3a2c;color:#fff;border-color:#0d3a2c}
 .gh-tool.accent{background:#C9A961;color:#0d3a2c;border-color:#C9A961}
 .gh-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
-.gh-grid{display:grid;grid-template-columns:120px repeat(7,minmax(96px,1fr)) 76px;gap:3px;font-size:12px;min-width:960px}
-.gh-grid.nototal{grid-template-columns:120px repeat(7,minmax(96px,1fr));min-width:884px}
-.gh-header{font-size:11px;font-weight:600;color:#5b5b55;text-align:center;padding:6px 2px;text-transform:uppercase;letter-spacing:.3px}
-.gh-header.total-h{color:#0d3a2c}
-.gh-cell{padding:6px 4px;min-height:40px;display:flex;flex-direction:column;gap:3px;min-width:0}
-.gh-namecell{background:#F7F4EC;border-radius:4px;justify-content:center;position:relative}
-.gh-name{font-weight:600;color:#0d3a2c;font-size:12.5px;display:flex;align-items:center;gap:6px}
-.gh-name .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gh-grid{display:grid;grid-template-columns:170px repeat(7,minmax(96px,1fr)) 76px;gap:3px;font-size:12px;min-width:1010px}
+.gh-grid.nototal{grid-template-columns:170px repeat(7,minmax(96px,1fr));min-width:934px}
+.gh-namecell{background:#F7F4EC;border-radius:4px;justify-content:center;position:relative;padding:4px 6px}
+.gh-name{font-weight:600;color:#0d3a2c;font-size:12.5px;display:flex;align-items:center;gap:6px;width:100%}
+.gh-name .nm{flex:1;min-width:0;white-space:normal;overflow-wrap:anywhere;line-height:1.2}
 .gh-name .xbtn{border:0;background:transparent;color:#b3261e;cursor:pointer;font-size:14px;line-height:1;padding:2px 4px;border-radius:4px}
 .gh-name .xbtn:hover{background:#fdeceb}
 .gh-name .pick{margin:0 4px 0 0;cursor:pointer;accent-color:#0d3a2c}
