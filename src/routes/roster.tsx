@@ -168,13 +168,16 @@ const prettyDate = (d: string | null, startDay: number | null = null) => {
 function buildStaffHTML(title: string, weekDate: string | null, startDay: number | null, staff: string[], rows: Row[]) {
   const orderedDays = startDay != null ? [...DAYS.slice(startDay), ...DAYS.slice(0, startDay)] : DAYS;
   let html = "";
-  html += '<div class="gh-header"></div>' + orderedDays.map((d) => `<div class="gh-header">${d}</div>`).join("");
+  html += '<div class="gh-header"></div>' + orderedDays.map((d) => `<div class="gh-header">${d}</div>`).join("") + '<div class="gh-header total-h">Total</div>';
+  let grand = 0;
   staff.forEach((person) => {
     html += `<div class="gh-cell gh-namecell"><span class="gh-name">${person}</span></div>`;
+    let personMins = 0;
     orderedDays.forEach((day) => {
       const ce = rows.filter((e) => e.staff_name === person && e.day === day);
       let c = '<div class="gh-cell">';
       ce.forEach((e) => {
+        personMins += entryHrs(e);
         c += e.is_off
           ? '<div class="gh-off">off</div>'
           : `<div class="gh-shift">${fmt(e.start_time!)}\u2013${fmt(e.end_time!)}</div>`;
@@ -182,11 +185,14 @@ function buildStaffHTML(title: string, weekDate: string | null, startDay: number
       c += "</div>";
       html += c;
     });
+    grand += personMins;
+    html += `<div class="gh-cell gh-totalcell"><span class="v">${personMins > 0 ? fmtHrs(personMins) : "—"}</span></div>`;
   });
   const dateHtml = weekDate
     ? `<span>Pay week commencing ${prettyDate(weekDate, startDay)}</span>`
     : (startDay != null ? `<span>Pay week commencing ${DAY_ABBR[startDay]}</span>` : "");
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title><style>${STYLE}</style></head><body><div class="gh-wrap"><div class="gh-topbar"><div class="gh-brand"><h1>Glasshouse</h1><span>${title}</span>${dateHtml}</div></div><div class="gh-grid nototal">${html}</div></div></body></html>`;
+  const grandHtml = `<div class="gh-grandrow"><span class="lbl">Total</span><span class="v">${fmtHrs(grand)}</span></div>`;
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title><style>${STYLE}</style></head><body><div class="gh-wrap"><div class="gh-topbar"><div class="gh-brand"><h1>Glasshouse</h1><span>${title}</span>${dateHtml}</div></div><div class="gh-grid">${html}</div>${grandHtml}</div></body></html>`;
 }
 
 function RosterPage() {
