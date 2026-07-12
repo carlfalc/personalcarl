@@ -36,6 +36,7 @@ function ImagesPage() {
 
   const handleUpload = async (files: FileList | null) => {
     if (!files?.length) return;
+    const fileList = Array.from(files);
     const { data: userData, error: uErr } = await supabase.auth.getUser();
     if (uErr || !userData.user) { toast.error("Not signed in"); return; }
     const userId = userData.user.id;
