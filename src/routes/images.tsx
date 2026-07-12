@@ -201,7 +201,7 @@ function ImagesPage() {
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : images.length === 0 ? (
         <Card className="p-10 text-center">
-          <p className="text-muted-foreground">No images yet. Send a photo to your Telegram bot to see it here.</p>
+          <p className="text-muted-foreground">No images yet. Upload from your device or send a photo to your Telegram bot.</p>
         </Card>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
