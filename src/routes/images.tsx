@@ -42,7 +42,7 @@ function ImagesPage() {
     const userId = userData.user.id;
     setUploading(true);
     let ok = 0;
-    for (const file of Array.from(files)) {
+    for (const file of fileList) {
       if (!file.type.startsWith("image/")) { toast.error(`${file.name}: not an image`); continue; }
       if (file.size > 20 * 1024 * 1024) { toast.error(`${file.name}: exceeds 20 MB`); continue; }
       try {
