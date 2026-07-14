@@ -254,9 +254,9 @@ async function runMorningBriefing(owner: OwnerProfile, now: ReturnType<typeof no
   );
   const meetings = meetingsRes.ok ? await meetingsRes.json() : [];
 
-  // Tasks due today or overdue
+  // Tasks: due today, overdue, OR undated open tasks (Carl often doesn't set due_date)
   const tasksRes = await db(
-    `entries?select=content,priority,status,due_date,type&user_id=eq.${owner.id}&due_date=lte.${todayYmd}&status=neq.done&order=priority.asc,due_date.asc`,
+    `entries?select=content,priority,status,due_date,type&user_id=eq.${owner.id}&type=in.(task,todo)&status=neq.done&or=(due_date.lte.${todayYmd},due_date.is.null)&order=priority.asc.nullslast,due_date.asc.nullslast&limit=50`,
   );
   const tasks = tasksRes.ok ? await tasksRes.json() : [];
 
