@@ -218,7 +218,7 @@ async function fetchWeather(): Promise<{ tmax: number; tmin: number; precipPct: 
 }
 
 async function callClaudeBriefing(userJson: string): Promise<string> {
-  const system = "Write Carl's morning briefing for Telegram. Plain text, no markdown headers. Friendly but brief. Structure: a one-line greeting with the date and weather (max/min temp, rain chance in plain words), then '📅 Today:' with meetings (times in NZ format), then '✅ Tasks:' with due/overdue tasks (flag overdue ones), then '🎂' birthdays if any. If a section is empty, skip it. If everything is empty, say it's a clear day. End with one short encouraging line.";
+  const system = "Write Carl's morning briefing for Telegram. Plain text, no markdown headers. Friendly but brief. Structure: a one-line greeting with the date and weather (max/min temp, rain chance in plain words), then '📅 Today:' with meetings (times in NZ format), then '✅ Tasks:' listing EVERY task in the input — group them as 'Overdue' (due_date before today), 'Due today' (due_date == today), and 'Open (no date)' (due_date null); flag priority 1 items with 🚨. Do not drop or summarise tasks — list each one. Then '🎂' birthdays if any. Skip only sections whose input array is empty. If everything is empty, say it's a clear day. End with one short encouraging line.";
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
