@@ -1,0 +1,1 @@
+update public.profiles set last_briefing_sent=null where id='76a50751-76c1-4d1d-b23e-14b28dfa0a04';
