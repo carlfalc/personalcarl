@@ -218,7 +218,7 @@ async function fetchWeather(): Promise<{ tmax: number; tmin: number; precipPct: 
 }
 
 async function callClaudeBriefing(userJson: string): Promise<string> {
-  const system = "Write Carl's morning briefing for Telegram. Plain text, no markdown headers. Friendly but brief. Structure: a one-line greeting with the date and weather (max/min temp, rain chance in plain words), then '📅 Today:' with meetings (times in NZ format), then '✅ Tasks:' with due/overdue tasks (flag overdue ones), then '🎂' birthdays if any. If a section is empty, skip it. If everything is empty, say it's a clear day. End with one short encouraging line.";
+  const system = "Write Carl's morning briefing for Telegram. Plain text, no markdown headers. Friendly but brief. Structure: a one-line greeting with the date and weather (max/min temp, rain chance in plain words), then '📅 Today:' with meetings (times in NZ format), then '✅ Tasks:' listing EVERY task in the input — group them as 'Overdue' (due_date before today), 'Due today' (due_date == today), and 'Open (no date)' (due_date null); flag priority 1 items with 🚨. Do not drop or summarise tasks — list each one. Then '🎂' birthdays if any. Skip only sections whose input array is empty. If everything is empty, say it's a clear day. End with one short encouraging line.";
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -254,9 +254,9 @@ async function runMorningBriefing(owner: OwnerProfile, now: ReturnType<typeof no
   );
   const meetings = meetingsRes.ok ? await meetingsRes.json() : [];
 
-  // Tasks due today or overdue
+  // Tasks: due today, overdue, OR undated open tasks (Carl often doesn't set due_date)
   const tasksRes = await db(
-    `entries?select=content,priority,status,due_date,type&user_id=eq.${owner.id}&due_date=lte.${todayYmd}&status=neq.done&order=priority.asc,due_date.asc`,
+    `entries?select=content,priority,status,due_date,type&user_id=eq.${owner.id}&type=in.(task,todo)&status=neq.done&or=(due_date.lte.${todayYmd},due_date.is.null)&order=priority.asc.nullslast,due_date.asc.nullslast&limit=50`,
   );
   const tasks = tasksRes.ok ? await tasksRes.json() : [];
 
@@ -306,9 +306,9 @@ async function runEveningNudge(owner: OwnerProfile, now: ReturnType<typeof nowIn
   if (lastYmd === todayYmd) return;
   if (!isAtOrPastTime(owner.nudge_time, now)) return;
 
-  // Open tasks/todos due today or overdue
+  // Open tasks/todos due today, overdue, or undated
   const tasksRes = await db(
-    `entries?select=id,content,priority,status,due_date,type&user_id=eq.${owner.id}&type=in.(task,todo)&due_date=lte.${todayYmd}&status=neq.done&order=due_date.asc,priority.asc`,
+    `entries?select=id,content,priority,status,due_date,type&user_id=eq.${owner.id}&type=in.(task,todo)&status=neq.done&or=(due_date.lte.${todayYmd},due_date.is.null)&order=due_date.asc.nullslast,priority.asc.nullslast&limit=50`,
   );
   const tasks = tasksRes.ok ? await tasksRes.json() as Array<{ content: string; due_date: string | null }> : [];
 
