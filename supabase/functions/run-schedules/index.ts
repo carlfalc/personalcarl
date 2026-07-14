@@ -283,13 +283,27 @@ async function runMorningBriefing(owner: OwnerProfile, now: ReturnType<typeof no
 
   const payload = {
     date_nz: new Date().toLocaleDateString("en-NZ", { timeZone: TZ, weekday: "long", day: "numeric", month: "long" }),
+    city: "Whanganui, New Zealand",
     weather,
     meetings,
     tasks,
     birthdays: upcomingBdays,
   };
 
-  const text = await callClaudeBriefing(JSON.stringify(payload));
+  const briefingPrompt =
+    "Write Carl's morning briefing for Telegram in plain text (no markdown headers). Friendly, concise, but complete.\n\n" +
+    "Use the JSON below for the user's own data (weather forecast, meetings, tasks, birthdays). Then USE THE web_search TOOL to fetch today's info for the extra sections. Do NOT invent numbers — if a search fails, say 'unavailable'.\n\n" +
+    "Structure (skip a section only if it is truly empty AND you couldn't fetch it):\n" +
+    "1. One-line greeting with the date and the weather for the city in the JSON (max/min °C, rain chance in plain words).\n" +
+    "2. '📅 Today:' — every meeting, times in NZ format.\n" +
+    "3. '✅ Tasks:' — list EVERY task in the input. Group as 'Overdue' (due_date before today), 'Due today' (due_date == today), 'Open (no date)' (due_date null). Flag priority 1 with 🚨. Do not drop or summarise.\n" +
+    "4. '📈 Markets:' — web_search for today's Rocket Lab (NASDAQ: RKLB) price and % change, plus one sentence on any SpaceX news today (SpaceX is private — cover recent launch/news, not a share price).\n" +
+    "5. '🔮 Horoscope:' — web_search for today's Sagittarius daily horoscope AND today's Chinese zodiac Rat daily horoscope. One short paragraph each, labelled.\n" +
+    "6. '🎂' birthdays if any.\n" +
+    "End with one short encouraging line.\n\n" +
+    "Data:\n" + JSON.stringify(payload);
+
+  const text = await callAnthropic(briefingPrompt);
   if (text) await sendTelegram(owner.telegram_chat_id, text);
 
   await db(`profiles?id=eq.${owner.id}`, {
