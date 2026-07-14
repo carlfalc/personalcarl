@@ -306,9 +306,9 @@ async function runEveningNudge(owner: OwnerProfile, now: ReturnType<typeof nowIn
   if (lastYmd === todayYmd) return;
   if (!isAtOrPastTime(owner.nudge_time, now)) return;
 
-  // Open tasks/todos due today or overdue
+  // Open tasks/todos due today, overdue, or undated
   const tasksRes = await db(
-    `entries?select=id,content,priority,status,due_date,type&user_id=eq.${owner.id}&type=in.(task,todo)&due_date=lte.${todayYmd}&status=neq.done&order=due_date.asc,priority.asc`,
+    `entries?select=id,content,priority,status,due_date,type&user_id=eq.${owner.id}&type=in.(task,todo)&status=neq.done&or=(due_date.lte.${todayYmd},due_date.is.null)&order=due_date.asc.nullslast,priority.asc.nullslast&limit=50`,
   );
   const tasks = tasksRes.ok ? await tasksRes.json() as Array<{ content: string; due_date: string | null }> : [];
 
